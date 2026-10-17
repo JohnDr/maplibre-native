@@ -222,6 +222,10 @@ vec4 projectTileFor3D(vec2 pos, float elevation, ProjectionUBO projection) {
     return interpolateProjectionFor3D(pos, projectToSphere(pos, pos, projection), elevation, projection);
 }
 
+vec4 projectTileWithElevation(vec2 pos, float elevation, ProjectionUBO projection) {
+    return interpolateProjection(pos, projectToSphere(pos, vec2(0.0, 0.0), projection), elevation, projection);
+}
+
 #else
 
 vec4 projectTile(vec2 pos, ProjectionUBO projection) {
@@ -238,6 +242,10 @@ vec4 projectTile(vec2 pos, vec2 rawPos, ProjectionUBO projection) {
 }
 
 vec4 projectTileFor3D(vec2 pos, float elevation, ProjectionUBO projection) {
+    return projection.matrix * vec4(pos, elevation, 1.0);
+}
+
+vec4 projectTileWithElevation(vec2 pos, float elevation, ProjectionUBO projection) {
     return projection.matrix * vec4(pos, elevation, 1.0);
 }
 
