@@ -54,9 +54,15 @@ layout(set = DRAWABLE_IMAGE_SET_INDEX, binding = 0) uniform sampler2D drapeSampl
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    // Per-tile drape: this tile's own texture, shaded by the precomputed hillshade.
+    // Per-tile drape: this tile's own texture, shaded by the precomputed hillshade. Where no draping layer was
+    // rendered (black, e.g. before imagery loads) fall back to a hypsometric tint so the relief is still visible.
     const vec4 draped = texture(drapeSampler, vec2(v_uv.x, 1.0 - v_uv.y));
-    out_color = vec4(draped.rgb * clamp(v_shade, 0.0, 1.0), 1.0);
+    const float shade = clamp(v_shade, 0.0, 1.0);
+    const float lum = max(draped.r, max(draped.g, draped.b));
+    const vec3 low = vec3(0.24, 0.42, 0.24);
+    const vec3 high = vec3(0.86, 0.83, 0.72);
+    const vec3 tint = mix(low, high, shade);
+    out_color = vec4((lum < 0.02 ? tint : draped.rgb) * shade, 1.0);
 }
 )";
 };
