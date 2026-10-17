@@ -431,7 +431,7 @@ void Map::setProjectionType(ProjectionType type) {
     impl->transform.setProjectionType(type);
     if (impl->style) {
         auto projection = std::make_unique<style::Projection>();
-        projection->setType(ProjectionDefinition{type == ProjectionType::Globe ? "globe" : "mercator"});
+        projection->setType(ProjectionDefinition{type});
         impl->style->impl->setProjection(std::move(projection));
     }
     impl->onUpdate();

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <mln/map/mode.hpp>
-#include <mln/map/projection_type.hpp>
+#include <mln/style/projection_definition.hpp>
 #include <mln/util/geo.hpp>
 #include <mln/util/size.hpp>
 

@@ -11,7 +11,7 @@
 #include <mln/map/camera.hpp>
 #include <mln/util/geometry.hpp>
 #include <mln/map/projection_mode.hpp>
-#include <mln/map/projection_type.hpp>
+#include <mln/style/projection_definition.hpp>
 #include <mln/storage/resource_options.hpp>
 #include <mln/util/client_options.hpp>
 #include <mln/util/action_journal_options.hpp>

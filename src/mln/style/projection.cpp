@@ -4,6 +4,9 @@
 #include <mln/style/conversion/property_value.hpp>
 #include <mln/style/conversion_impl.hpp>
 #include <mln/renderer/property_evaluator.hpp>
+#include <mln/util/interpolate.hpp>
+
+#include <algorithm>
 
 namespace mln {
 namespace style {
@@ -67,7 +70,35 @@ StyleProperty Projection::getProperty(const std::string& name) const {
 
 ProjectionDefinition Projection::Impl::evaluate(float zoom) const {
     const PropertyEvaluationParameters parameters(zoom);
-    return type.evaluate(PropertyEvaluator<ProjectionDefinition>(parameters, Projection::getDefaultType()));
+    const auto definition =
+        type.evaluate(PropertyEvaluator<ProjectionDefinition>(parameters, Projection::getDefaultType()));
+    if (definition.from != ProjectionType::Globe && definition.to != ProjectionType::Globe) {
+        return definition;
+    }
+    // `globe` is the vertical perspective up to the first zoom and Mercator from the second, blended in between, at
+    // either end of a definition: each end counts with its share of the globe at this zoom. (GL JS's hand-off; without
+    // it the globe radius grows without bound and the camera ends up on the sphere's surface.)
+    constexpr float globeToMercatorStartZoom = 11;
+    constexpr float globeToMercatorEndZoom = 12;
+    const double globeShare = 1.0 - std::clamp(static_cast<double>(zoom - globeToMercatorStartZoom) /
+                                                   (globeToMercatorEndZoom - globeToMercatorStartZoom),
+                                               0.0,
+                                               1.0);
+    const auto share = [&](ProjectionType end) {
+        return end == ProjectionType::Globe ? globeShare : end == ProjectionType::Mercator ? 0.0 : 1.0;
+    };
+    const double globe = definition.from == definition.to
+                             ? share(definition.from)
+                             : util::interpolate(share(definition.from),
+                                                 share(definition.to),
+                                                 std::clamp(definition.transition, 0.0, 1.0));
+    if (globe >= 1) {
+        return ProjectionDefinition(ProjectionType::VerticalPerspective);
+    }
+    if (globe <= 0) {
+        return ProjectionDefinition(ProjectionType::Mercator);
+    }
+    return ProjectionDefinition(ProjectionType::VerticalPerspective, ProjectionType::Mercator, 1 - globe);
 }
 
 } // namespace style
