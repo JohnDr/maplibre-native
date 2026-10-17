@@ -11,6 +11,7 @@
 #include <mln/map/camera.hpp>
 #include <mln/util/geometry.hpp>
 #include <mln/map/projection_mode.hpp>
+#include <mln/map/projection_type.hpp>
 #include <mln/storage/resource_options.hpp>
 #include <mln/util/client_options.hpp>
 #include <mln/util/action_journal_options.hpp>
@@ -114,6 +115,10 @@ public:
     // Projection Mode
     void setProjectionMode(const ProjectionMode&);
     ProjectionMode getProjectionMode() const;
+
+    // Map projection (Mercator / Globe). Only Mercator is rendered today.
+    void setProjectionType(ProjectionType);
+    ProjectionType getProjectionType() const;
 
     // Projection
     ScreenCoordinate pixelForLatLng(const LatLng&) const;

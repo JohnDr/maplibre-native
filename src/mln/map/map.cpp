@@ -407,7 +407,8 @@ MapOptions Map::getMapOptions() const {
                          .withCrossSourceCollisions(impl->crossSourceCollisions)
                          .withNorthOrientation(impl->transform.getNorthOrientation())
                          .withSize(impl->transform.getState().getSize())
-                         .withPixelRatio(impl->pixelRatio));
+                         .withPixelRatio(impl->pixelRatio)
+                         .withProjectionType(impl->transform.getProjectionType()));
 }
 
 // MARK: - Projection mode
@@ -419,6 +420,17 @@ void Map::setProjectionMode(const ProjectionMode& options) {
 
 ProjectionMode Map::getProjectionMode() const {
     return impl->transform.getProjectionMode();
+}
+
+// MARK: - Projection type
+
+void Map::setProjectionType(ProjectionType type) {
+    impl->transform.setProjectionType(type);
+    impl->onUpdate();
+}
+
+ProjectionType Map::getProjectionType() const {
+    return impl->transform.getProjectionType();
 }
 
 // MARK: - Projection

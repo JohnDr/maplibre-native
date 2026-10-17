@@ -12,6 +12,7 @@ public:
     Size size = {64, 64};
     float pixelRatio = 1.0;
     bool fastPFOREnabled = false;
+    ProjectionType projectionType = ProjectionType::Mercator;
 };
 
 // These requires the complete type of Impl.
@@ -90,6 +91,15 @@ MapOptions& MapOptions::withFastPFOREnabled(bool enable) {
 
 bool MapOptions::fastPFOREnabled() const {
     return impl_->fastPFOREnabled;
+}
+
+MapOptions& MapOptions::withProjectionType(ProjectionType projection) {
+    impl_->projectionType = projection;
+    return *this;
+}
+
+ProjectionType MapOptions::projectionType() const {
+    return impl_->projectionType;
 }
 
 } // namespace mln

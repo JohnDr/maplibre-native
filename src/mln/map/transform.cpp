@@ -582,6 +582,16 @@ ProjectionMode Transform::getProjectionMode() const {
         .withYSkew(state.getYSkew());
 }
 
+// MARK: - Projection type
+
+void Transform::setProjectionType(ProjectionType type) {
+    state.setProjectionType(type);
+}
+
+ProjectionType Transform::getProjectionType() const {
+    return state.getProjectionType();
+}
+
 // MARK: - Transition
 
 void Transform::startTransition(const CameraOptions& camera,

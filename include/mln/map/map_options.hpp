@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mln/map/mode.hpp>
+#include <mln/map/projection_type.hpp>
 #include <mln/util/geo.hpp>
 #include <mln/util/size.hpp>
 
@@ -148,6 +149,25 @@ public:
      * @return true if enabled, alse otherwise.
      */
     bool fastPFOREnabled() const;
+
+    /**
+     * @brief Sets the map projection. By default, it is set to
+     * ProjectionType::Mercator (the flat Web Mercator map).
+     *
+     * Selecting ProjectionType::Globe records the request to render the world
+     * on a sphere; only Mercator is rendered today.
+     *
+     * @param projection Map projection.
+     * @return MapOptions for chaining options together.
+     */
+    MapOptions& withProjectionType(ProjectionType projection);
+
+    /**
+     * @brief Gets the previously set (or default) map projection.
+     *
+     * @return Map projection.
+     */
+    ProjectionType projectionType() const;
 
 private:
     class Impl;

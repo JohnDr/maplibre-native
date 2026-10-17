@@ -2,6 +2,8 @@
 
 #include <mln/map/camera.hpp>
 #include <mln/map/mode.hpp>
+#include <mln/map/projection_base.hpp>
+#include <mln/map/projection_type.hpp>
 #include <mln/util/camera.hpp>
 #include <mln/util/constants.hpp>
 #include <mln/util/geo.hpp>
@@ -13,6 +15,7 @@
 #include <cstdint>
 #include <array>
 #include <limits>
+#include <memory>
 #include <optional>
 
 namespace mln {
@@ -97,6 +100,10 @@ struct TransformStateProperties {
         viewPortMode = val;
         return *this;
     }
+    TransformStateProperties& withProjectionType(const std::optional<ProjectionType>& val) {
+        projectionType = val;
+        return *this;
+    }
     TransformStateProperties withFrustumOffset(const std::optional<EdgeInsets>& val) {
         frustumOffset = val;
         return *this;
@@ -121,6 +128,7 @@ struct TransformStateProperties {
     std::optional<ConstrainMode> constrain;
     std::optional<NorthOrientation> northOrientation;
     std::optional<ViewportMode> viewPortMode;
+    std::optional<ProjectionType> projectionType;
     std::optional<EdgeInsets> frustumOffset;
 };
 
@@ -133,6 +141,9 @@ public:
     // Matrix
     void matrixFor(mat4&, const UnwrappedTileID&) const;
     void getProjMatrix(mat4& matrix, uint16_t nearZ = 1, bool aligned = false) const;
+    ProjectionData getProjectionData(const UnwrappedTileID&, const mat4& projMatrix) const;
+    ProjectionData getProjectionData(const UnwrappedTileID&) const;
+    ProjectionData getProjectionDataForMatrix(const UnwrappedTileID&, const mat4& mainMatrix) const;
 
     // Dimensions
     Size getSize() const;
@@ -153,6 +164,10 @@ public:
     // Viewport mode
     ViewportMode getViewportMode() const;
     void setViewportMode(ViewportMode val);
+
+    // Map projection (Mercator / Globe). Only Mercator is rendered today.
+    ProjectionType getProjectionType() const;
+    void setProjectionType(ProjectionType val);
 
     CameraOptions getCameraOptions(const std::optional<EdgeInsets>&) const;
 
@@ -299,8 +314,11 @@ private:
     const mat4& getInvertedMatrix() const;
 
 private:
+    std::shared_ptr<const ProjectionBase> projection;
+
     ConstrainMode constrainMode;
     ViewportMode viewportMode;
+    ProjectionType projectionType = ProjectionType::Mercator;
 
     // animation state
     bool rotating = false;
