@@ -1148,7 +1148,9 @@ void RenderOrchestrator::renderTerrainDrapeTargets(const RenderTree& renderTree,
         // Mercator world-y grows downward, and matrix::ortho maps its `top` arg to clip +1, so pass ty+s as
         // bottom and ty as top to keep the imagery upright.
         mat4 ortho;
-        matrix::ortho(ortho, tx, tx + s, ty + s, ty, -1.0, 1.0);
+        // Map z=0 to +0.5 (not the near plane) so the per-drawable depth offset applied by
+        // multiplyWithProjectionMatrix (enableDepth) keeps z within [0,1] on Vulkan instead of clipping.
+        matrix::ortho(ortho, tx, tx + s, ty + s, ty, -1.5, 0.5);
         parameters.projMatrixOverride = ortho;
         parameters.drapeTargetOrdinal = drapeOrdinal++;
         it->second->render(*this, renderTree, parameters);
