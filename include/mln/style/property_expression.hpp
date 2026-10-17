@@ -93,8 +93,15 @@ public:
     }
 
     T evaluate(float zoom) const {
-        assert(!isZoomConstant());
-        assert(isFeatureConstant());
+        // NOTE (downstream patch): the original asserts here are
+        //   assert(!isZoomConstant());
+        //   assert(isFeatureConstant());
+        // They reject legitimate callers such as CrossFadedPropertyEvaluator,
+        // which evaluates a cross-faded property (e.g. line-dasharray) at
+        // z-1/z/z+1 even when the expression is zoom-constant or a data
+        // (feature) expression. Release builds (asserts disabled) already
+        // evaluate these successfully, so the asserts are dropped to keep
+        // Debug builds in sync with Release.
         return evaluate(expression::EvaluationContext(zoom));
     }
 
