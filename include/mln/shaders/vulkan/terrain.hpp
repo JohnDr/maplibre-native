@@ -84,12 +84,8 @@ layout(set = DRAWABLE_IMAGE_SET_INDEX, binding = 0) uniform sampler2D drapeSampl
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    // Per-tile drape: this tile's own texture, drawn as is (GL JS draws the render-to-texture result directly). Where
-    // no draping layer was rendered (alpha 0, e.g. before imagery loads or a hillshade-only style over flat ground)
-    // fall back to a flat tint so the surface is not see-through.
-    const vec4 draped = texture(drapeSampler, v_uv);
-    const vec3 tint = vec3(0.86, 0.83, 0.72);
-    vec4 surface = vec4(draped.a < 0.5 ? tint : draped.rgb, 1.0);
+    // Per-tile drape: this tile's own texture, drawn as is (GL JS terrain.fragment.glsl: `fragColor = surface_color`).
+    vec4 surface = texture(drapeSampler, v_uv);
 
     // GL JS terrain.fragment.glsl: blend the surface towards the fog / horizon colour with distance, in linear colour.
     const float ground_blend = fog.params.x;

@@ -46,13 +46,14 @@ struct TerrainMesh {
     std::vector<uint16_t> indices;
 };
 
-/// Builds a grid over one DEM tile: xy in tile units (0..EXTENT), z the elevation in metres (the camera's
-/// world-to-camera matrix scales z by pixels-per-metre, like every 3D layer). The relief shading comes from the draped
-/// hillshade layer, as in GL JS; the mesh carries none.
-TerrainMesh buildTerrainMesh(const DEMData* dem, double exaggeration, const CanonicalTileID& tile) {
+/// Builds a grid over one terrain tile: xy in tile units (0..EXTENT), z the elevation in metres (the camera's
+/// world-to-camera matrix scales z by pixels-per-metre, like every 3D layer). The terrain tile covers the square
+/// `size` DEM pixels wide at (`offsetX`, `offsetY`) of its DEM tile (GL JS samples a sub-rectangle of the coarser DEM
+/// tile the same way). The relief shading comes from the draped hillshade layer, as in GL JS; the mesh carries none.
+TerrainMesh buildTerrainMesh(
+    const DEMData* dem, double offsetX, double offsetY, double size, double exaggeration, const CanonicalTileID& tile) {
     // A null `dem` is a tile the source does not have (open sea): flat at sea level, as GL JS treats missing DEM.
     const std::size_t n = TerrainGridPoints;
-    const double dim = dem != nullptr ? static_cast<double>(dem->dim) : 256.0;
     // Ground width of this tile at its own latitude.
     const double tilesAcross = static_cast<double>(1ull << tile.z);
     const double tileLat = std::atan(std::sinh(std::numbers::pi * (1.0 - 2.0 * (tile.y + 0.5) / tilesAcross)));
@@ -64,7 +65,7 @@ TerrainMesh buildTerrainMesh(const DEMData* dem, double exaggeration, const Cano
         for (std::size_t i = 0; i < n; i++) {
             const double u = static_cast<double>(i) / static_cast<double>(TerrainGridSegments);
             const double v = static_cast<double>(j) / static_cast<double>(TerrainGridSegments);
-            elevation[j * n + i] = dem != nullptr ? dem->getElevation(u * dim, v * dim) : 0.0;
+            elevation[j * n + i] = dem != nullptr ? dem->getElevation(offsetX + u * size, offsetY + v * size) : 0.0;
         }
     }
 
@@ -150,8 +151,9 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         return;
     }
 
-    if (!tileset || *tileset != *updateParameters.terrainTileset) {
+    if (!tileset || *tileset != *updateParameters.terrainTileset || tileSize != updateParameters.terrainTileSize) {
         tileset = updateParameters.terrainTileset;
+        tileSize = updateParameters.terrainTileSize;
         terrain = std::make_shared<TerrainTileManager>(updateParameters.fileSource.get(), *tileset);
         terrain->setOnTileLoaded(onTileLoaded);
         if (layerGroup) {
@@ -179,15 +181,16 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         layerGroup = context.createTileLayerGroup(0, initialCapacity, "terrain");
     }
 
-    // A neighbour's DEM border changed these tiles' edges: rebuild their meshes so shared edges agree.
+    // A DEM tile loaded, or a neighbour's DEM border changed its edges: rebuild the meshes sampling it, so they use
+    // the finer tile and shared edges agree.
     for (const auto& updated : terrain->takeUpdatedTiles()) {
         layerGroup->removeDrawablesIf([&](gfx::Drawable& drawable) {
-            return drawable.getTileID() && drawable.getTileID()->canonical == updated;
+            return drawable.getTileID() && terrain->sourceTileFor(drawable.getTileID()->canonical) == updated;
         });
     }
 
     const double zoom = state.getZoom();
-    const auto newDemZoom = static_cast<uint8_t>(std::clamp(std::floor(zoom) + 2.0, 0.0, 14.0));
+    const uint8_t newDemZoom = TerrainTileManager::terrainZoomFor(zoom, tileSize);
     if (newDemZoom != demZoom || builtZoom < 0 ||
         builtExaggeration != updateParameters.terrainExaggeration) {
         demZoom = newDemZoom;
@@ -211,7 +214,7 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
                                       .tileLodMode = updateParameters.tileLodMode,
                                       .terrainVariableZoom = true},
                                      demZoom,
-                                     Range<uint8_t>(0, demZoom));
+                                     Range<uint8_t>(0, TerrainTileManager::maxTerrainZoom));
     // Backstop only: the LOD cover is a few dozen tiles. It is sorted nearest the centre first.
     constexpr std::size_t maxTerrainTiles = 192;
     if (tileCover.size() > maxTerrainTiles) {
@@ -230,8 +233,8 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             continue;
         }
         const auto& canonical = tileID.canonical;
-        const auto data = terrain->getTileData(canonical);
-        if (!data && !terrain->isMissing(canonical)) {
+        const auto source = terrain->getSourceTile(canonical);
+        if (!source && !terrain->isMissing(canonical)) {
             continue; // still loading
         }
 
@@ -248,7 +251,23 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             builder->setVertexAttrId(shaders::idTerrainPosVertexAttribute);
         }
 
-        auto mesh = buildTerrainMesh(data.get(), updateParameters.terrainExaggeration, canonical);
+        // The terrain tile is a square of the (coarser) DEM tile it samples, as GL JS's DEM matrix selects.
+        double offsetX = 0.0;
+        double offsetY = 0.0;
+        double sampleSize = 0.0;
+        if (source) {
+            const int shift = canonical.z - source->id.z;
+            const double dim = static_cast<double>(source->data->dim);
+            sampleSize = dim / static_cast<double>(1ull << shift);
+            offsetX = static_cast<double>(canonical.x - (source->id.x << shift)) * sampleSize;
+            offsetY = static_cast<double>(canonical.y - (source->id.y << shift)) * sampleSize;
+        }
+        auto mesh = buildTerrainMesh(source ? source->data.get() : nullptr,
+                                     offsetX,
+                                     offsetY,
+                                     sampleSize,
+                                     updateParameters.terrainExaggeration,
+                                     canonical);
         const auto vertexCount = mesh.vertexCount;
         const auto indexCount = mesh.indices.size();
         builder->setRawVertices(std::move(mesh.vertices), vertexCount, gfx::AttributeDataType::Float3);
@@ -379,7 +398,8 @@ std::function<float(const UnwrappedTileID&)> TerrainPass::elevationFunction(cons
     TerrainTileManager* manager = terrain.get();
     const double scale = state.getScale();
     const double worldSize = Projection::worldSize(scale);
-    const uint8_t zoom = demZoom;
+    const auto sourceTile = terrain->sourceTileFor(CanonicalTileID(demZoom, 0, 0));
+    const uint8_t zoom = sourceTile ? sourceTile->z : 0; // the DEM zoom the mesh samples
     // Metres, like the terrain mesh: the camera matrix scales z by pixels-per-metre.
     return [manager, scale, worldSize, zoom, exaggeration](const UnwrappedTileID& tileID) -> float {
         const double n = std::ldexp(1.0, tileID.canonical.z);

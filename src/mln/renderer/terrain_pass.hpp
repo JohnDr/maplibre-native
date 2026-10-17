@@ -66,7 +66,8 @@ private:
     std::shared_ptr<TerrainTileManager> terrain;
     std::optional<Tileset> tileset;
     std::function<void()> onTileLoaded;
-    uint8_t demZoom = 0;
+    uint8_t demZoom = 0; // the terrain tile cover zoom (its DEM tiles are one zoom coarser, GL JS deltaZoom)
+    uint16_t tileSize = 512;
     double builtZoom = -1;
     double builtExaggeration = -1;
 };

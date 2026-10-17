@@ -48,3 +48,24 @@ TEST(TerrainTileManager, GetElevationUniform) {
     EXPECT_DOUBLE_EQ(manager.getElevation({45.0, 10.0}, 12), -10000.0);
     EXPECT_DOUBLE_EQ(manager.getElevation({-33.0, 151.0}, 10), -10000.0);
 }
+
+TEST(TerrainTileManager, TerrainZoomFollowsGLJS) {
+    // GL JS: coveringTiles with tileSize = source.tileSize * 2 on a 512-px transform => floor(zoom + log2(512 / that)).
+    EXPECT_EQ(TerrainTileManager::terrainZoomFor(13.3, 512), 12);
+    EXPECT_EQ(TerrainTileManager::terrainZoomFor(14.5, 512), 13);
+    EXPECT_EQ(TerrainTileManager::terrainZoomFor(13.3, 256), 13); // 256-px sources: terrain tiles are 512 px
+    EXPECT_EQ(TerrainTileManager::terrainZoomFor(0.4, 512), 0);
+    EXPECT_EQ(TerrainTileManager::terrainZoomFor(40.0, 256), TerrainTileManager::maxTerrainZoom);
+}
+
+TEST(TerrainTileManager, SourceTileIsOneZoomCoarserAndCapped) {
+    Tileset tileset;
+    tileset.zoomRange = {1, 12};
+    TerrainTileManager manager(nullptr, tileset);
+    // deltaZoom 1: the terrain tile (z, x, y) samples the DEM tile (z - 1, x / 2, y / 2).
+    EXPECT_TRUE(manager.sourceTileFor({10, 5, 7}) == CanonicalTileID(9, 2, 3));
+    // Capped at the source's maximum zoom (the DEM is then overzoomed).
+    EXPECT_TRUE(manager.sourceTileFor({16, 100, 200}) == CanonicalTileID(12, 100 >> 4, 200 >> 4));
+    // Below the source's minimum zoom there is none.
+    EXPECT_FALSE(manager.sourceTileFor({1, 0, 0}).has_value());
+}

@@ -24,6 +24,7 @@
 #include <mln/renderer/property_evaluation_parameters.hpp>
 #include <mln/renderer/tile_parameters.hpp>
 #include <mln/renderer/render_tile.hpp>
+#include <mln/renderer/terrain_tile_manager.hpp>
 #include <mln/renderer/style_diff.hpp>
 #include <mln/renderer/query.hpp>
 #include <mln/renderer/image_manager.hpp>
@@ -1068,17 +1069,59 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
         // Drape render-target size, per MapLibre GL JS (render_to_texture.ts):
         //   rttSize = terrainTileManager.tileSize * qualityFactor
         //   terrainTileManager.tileSize = source.tileSize * 2 (deltaZoom = 1), qualityFactor = 2
-        // i.e. rttSize = source.tileSize * 4 => 1024 for our 256-px raster sources. We use 512 (2x the
-        // source, GL JS's terrain tile size) as a first step to bound texture memory until an RTT cache
-        // like GL JS's exists, since we allocate one target per covered DEM tile with no LRU.
-        constexpr uint32_t drapeTileSize = 512;
+        // i.e. rttSize = source.tileSize * 4: 1024 for 256-px sources, 2048 for the 512-px DEM sources.
+        constexpr uint32_t qualityFactor = 2;
+        const uint32_t drapeTileSize = static_cast<uint32_t>(updateParameters->terrainTileSize) *
+                                       (1u << TerrainTileManager::deltaZoom) * qualityFactor;
+        if (drapeTileSize != terrainDrapeTileSize) {
+            terrainDrapeTileSize = drapeTileSize;
+            terrainDrapeTargets.clear();
+            terrainDrapeFingerprints.clear();
+        }
         const auto& cover = terrainPass.getCover();
-        const uint64_t fingerprint = (reinterpret_cast<uintptr_t>(updateParameters->layers.get()) * 1000003ULL) ^
-                                     (reinterpret_cast<uintptr_t>(updateParameters->sources.get()) * 1000033ULL) ^
-                                     (reinterpret_cast<uintptr_t>(updateParameters->images.get()) * 1000037ULL) ^
-                                     (static_cast<uint64_t>(terrainDrapeZoom) << 32) ^
-                                     (static_cast<uint64_t>(layerGroupsByLayerIndex.size()) << 20) ^
-                                     (static_cast<uint64_t>(drapeLayerIndices.size()) << 8) ^ drapeGeneration;
+
+        // A drape tile's fingerprint is GL JS's `RTTFingerprint`: the style (layers, sources, images), and the source
+        // tiles drawn into it with their data revision. It is re-rendered only when that changes, not on every
+        // source tile load anywhere in the view.
+        const uint64_t styleFingerprint = (reinterpret_cast<uintptr_t>(updateParameters->layers.get()) * 1000003ULL) ^
+                                          (reinterpret_cast<uintptr_t>(updateParameters->sources.get()) * 1000033ULL) ^
+                                          (reinterpret_cast<uintptr_t>(updateParameters->images.get()) * 1000037ULL) ^
+                                          (static_cast<uint64_t>(layerGroupsByLayerIndex.size()) << 20) ^
+                                          (static_cast<uint64_t>(drapeLayerIndices.size()) << 8);
+        std::vector<std::pair<int32_t, std::set<std::tuple<uint8_t, uint32_t, uint32_t>>>> drapeGroupTiles;
+        for (const auto& [index, layerGroup] : layerGroupsByLayerIndex) {
+            if (!layerGroup || !drapeLayerIndices.contains(index)) {
+                continue;
+            }
+            auto& tilesOfGroup = drapeGroupTiles.emplace_back(index, std::set<std::tuple<uint8_t, uint32_t, uint32_t>>{});
+            visitLayerGroupDrawables(*layerGroup, [&](gfx::Drawable& drawable) {
+                if (const auto& id = drawable.getTileID()) {
+                    tilesOfGroup.second.emplace(id->canonical.z, id->canonical.x, id->canonical.y);
+                }
+            });
+        }
+        const auto sourceTilesFingerprint = [&](const std::tuple<uint8_t, uint32_t, uint32_t>& key) {
+            const auto [kz, kx, ky] = key;
+            uint64_t hash = 1469598103934665603ULL;
+            const auto mix = [&hash](uint64_t value) { hash = (hash ^ value) * 1099511628211ULL; };
+            const auto& styleLayers = *updateParameters->layers;
+            for (const auto& [index, group] : drapeGroupTiles) {
+                mix(static_cast<uint64_t>(index) + 1);
+                const std::string& sourceID = styleLayers[static_cast<std::size_t>(index)]->source;
+                for (const auto& [z, x, y] : group) {
+                    // Overlap: one tile contains the other.
+                    const bool overlaps = z >= kz ? (x >> (z - kz)) == kx && (y >> (z - kz)) == ky
+                                                  : (kx >> (kz - z)) == x && (ky >> (kz - z)) == y;
+                    if (!overlaps) {
+                        continue;
+                    }
+                    const auto revision = drapeTileRevisions.find({sourceID, z, x, y});
+                    mix((static_cast<uint64_t>(z) << 56) ^ (static_cast<uint64_t>(x) << 28) ^ y);
+                    mix(revision != drapeTileRevisions.end() ? revision->second : 0);
+                }
+            }
+            return hash;
+        };
 
         std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr> drapeTextures;
         std::set<std::tuple<uint8_t, uint32_t, uint32_t>> live;
@@ -1104,6 +1147,7 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
             }
             drapeTextures[key] = it->second->getTexture();
             // Re-render only tiles that are new or whose source state changed.
+            const uint64_t fingerprint = styleFingerprint ^ sourceTilesFingerprint(key);
             const auto fpIt = terrainDrapeFingerprints.find(key);
             if (fpIt == terrainDrapeFingerprints.end() || fpIt->second != fingerprint) {
                 drapeTilesToRender.insert(key);
@@ -1239,11 +1283,11 @@ void RenderOrchestrator::onTileError(RenderSource& source, const OverscaledTileI
     observer->onResourceError(error);
 }
 
-void RenderOrchestrator::onTileChanged(RenderSource&, const OverscaledTileID&) {
+void RenderOrchestrator::onTileChanged(RenderSource& source, const OverscaledTileID& tileID) {
     MLN_TRACE_FUNC();
 
-    // A source tile changed: the drape textures may be stale.
-    ++drapeGeneration;
+    // A source tile changed: the drape tiles it lies under are stale (their fingerprints include this revision).
+    ++drapeTileRevisions[{source.baseImpl->id, tileID.canonical.z, tileID.canonical.x, tileID.canonical.y}];
     observer->onInvalidate();
 }
 

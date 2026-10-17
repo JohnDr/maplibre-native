@@ -9,6 +9,7 @@
 #include <mln/util/constants.hpp>
 #include <mln/util/image.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -93,10 +94,50 @@ std::optional<double> TerrainTileManager::sampleElevation(const LatLng& latLng, 
     return stillLoading ? std::nullopt : std::optional<double>(0.0);
 }
 
+uint8_t TerrainTileManager::terrainZoomFor(double mapZoom, uint16_t sourceTileSize) {
+    const double terrainTileSize = static_cast<double>(sourceTileSize) * static_cast<double>(1u << deltaZoom);
+    const double desired = std::floor(mapZoom + std::log2(512.0 / terrainTileSize));
+    return static_cast<uint8_t>(std::clamp(desired, 0.0, static_cast<double>(maxTerrainZoom)));
+}
+
+std::optional<CanonicalTileID> TerrainTileManager::sourceTileFor(const CanonicalTileID& terrainTile) const {
+    int z = static_cast<int>(terrainTile.z) - deltaZoom;
+    z = std::min<int>(z, tileset.zoomRange.max);
+    if (z < static_cast<int>(tileset.zoomRange.min) || z < 0) {
+        return std::nullopt;
+    }
+    const int shift = terrainTile.z - z;
+    return CanonicalTileID(static_cast<uint8_t>(z), terrainTile.x >> shift, terrainTile.y >> shift);
+}
+
+std::optional<TerrainTileManager::SourceTile> TerrainTileManager::getSourceTile(const CanonicalTileID& terrainTile) {
+    const auto source = sourceTileFor(terrainTile);
+    if (!source) {
+        return std::nullopt;
+    }
+    if (auto data = getDEMData(*source)) {
+        return SourceTile{std::move(data), *source};
+    }
+    // Still loading: use the nearest loaded ancestor meanwhile.
+    for (int z = static_cast<int>(source->z) - 1; z >= static_cast<int>(tileset.zoomRange.min) && z >= 0; --z) {
+        const int shift = source->z - z;
+        const CanonicalTileID id(static_cast<uint8_t>(z), source->x >> shift, source->y >> shift);
+        const auto it = tiles.find(keyFor(id));
+        if (it != tiles.end() && it->second.data) {
+            return SourceTile{it->second.data, id};
+        }
+    }
+    return std::nullopt;
+}
+
 std::optional<std::pair<double, double>> TerrainTileManager::getMinMaxElevation(const CanonicalTileID& id) const {
-    for (int z = id.z; z >= 0; --z) {
-        const int shift = id.z - z;
-        const auto it = tiles.find(keyFor(CanonicalTileID(static_cast<uint8_t>(z), id.x >> shift, id.y >> shift)));
+    const auto source = sourceTileFor(id);
+    if (!source) {
+        return std::nullopt;
+    }
+    for (int z = source->z; z >= 0; --z) {
+        const int shift = source->z - z;
+        const auto it = tiles.find(keyFor(CanonicalTileID(static_cast<uint8_t>(z), source->x >> shift, source->y >> shift)));
         if (it != tiles.end() && it->second.data) {
             return std::make_pair(it->second.data->minElevation, it->second.data->maxElevation);
         }

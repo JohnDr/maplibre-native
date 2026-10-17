@@ -66,6 +66,8 @@ public:
     // CFID: 3D terrain. When the tileset is set, the terrain pass fetches this raster-dem source and drapes it.
     std::optional<Tileset> terrainTileset = std::nullopt;
     double terrainExaggeration = 1.0;
+    // The terrain source's tile size in pixels; terrain tiles are twice that (GL JS `TerrainTileManager#tileSize`).
+    uint16_t terrainTileSize = 512;
 
     // The style's `sky` (none when the style has no sky).
     std::optional<Immutable<style::Sky::Impl>> sky = std::nullopt;

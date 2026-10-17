@@ -281,12 +281,14 @@ private:
 
     // Per-tile offscreen targets holding the map layers draped over the terrain, keyed by tile (z, x, y).
     std::map<std::tuple<uint8_t, uint32_t, uint32_t>, RenderTargetPtr> terrainDrapeTargets;
-    std::uint8_t terrainDrapeZoom = 0;
-    // Per-tile fingerprint of the state the drape texture was rendered from; a tile is re-rendered only when it
-    // changes (style/source/image identity, zoom) or a source tile changed (`drapeGeneration`).
+    uint32_t terrainDrapeTileSize = 0;
+    // Per-tile fingerprint of the state the drape texture was rendered from (GL JS `RTTFingerprint`): the style
+    // identity and the source tiles under the drape tile with their revisions. A tile is re-rendered only when it
+    // changes.
     std::map<std::tuple<uint8_t, uint32_t, uint32_t>, uint64_t> terrainDrapeFingerprints;
     std::set<std::tuple<uint8_t, uint32_t, uint32_t>> drapeTilesToRender;
-    uint64_t drapeGeneration = 0;
+    // How often each source tile's data changed, keyed by (source id, tile z, x, y).
+    std::map<std::tuple<std::string, uint8_t, uint32_t, uint32_t>, uint64_t> drapeTileRevisions;
     // Style layer indices rendered into the drape (background/fill/line/raster/hillshade/color-relief).
     std::set<int32_t> drapeLayerIndices;
     RenderItem::DebugLayerGroupMap debugLayerGroups;

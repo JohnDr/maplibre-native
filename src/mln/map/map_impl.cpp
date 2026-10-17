@@ -172,6 +172,7 @@ void Map::Impl::onUpdate() {
             if (const Tileset* resolved = resolvedTerrainTileset(static_cast<style::TileSource*>(source))) {
                 params.terrainTileset = *resolved;
                 params.terrainExaggeration = terrain->getExaggeration();
+                params.terrainTileSize = static_cast<style::TileSource*>(source)->impl().getTileSize();
             }
         }
     }
@@ -188,7 +189,11 @@ std::optional<double> Map::Impl::terrainElevationAt(const LatLng& latLng) {
         return std::nullopt;
     }
     constexpr uint8_t coarseZoom = 9; // answers quickly while the fine tile is still loading
-    return terrainElevation->sampleElevation(latLng.wrapped(), terrainDemZoom, std::min(coarseZoom, terrainDemZoom));
+    // The DEM zoom the terrain mesh samples at this map zoom (GL JS `TerrainTileManager#getSourceTile`).
+    const auto source = terrainElevation->sourceTileFor(
+        CanonicalTileID(TerrainTileManager::terrainZoomFor(transform.getZoom(), terrainTileSize), 0, 0));
+    const uint8_t demZoom = source ? source->z : 0;
+    return terrainElevation->sampleElevation(latLng.wrapped(), demZoom, std::min(coarseZoom, demZoom));
 }
 
 void Map::Impl::updateTerrainCamera() {
@@ -203,6 +208,7 @@ void Map::Impl::updateTerrainCamera() {
                 if (resolved != nullptr) {
                     tileset = resolved;
                     exaggeration = terrain->getExaggeration();
+                    terrainTileSize = static_cast<style::TileSource*>(source)->impl().getTileSize();
                 }
             }
         }
@@ -225,7 +231,6 @@ void Map::Impl::updateTerrainCamera() {
         terrainElevation->setTileset(*tileset);
     }
     terrainElevationExaggeration = exaggeration;
-    terrainDemZoom = std::min<uint8_t>(tileset->zoomRange.max, 14);
 
     // While the DEM under the centre is still loading, leave the camera alone rather than snap it to sea level.
     const auto centreElevation = terrainElevationAt(transform.getLatLng());

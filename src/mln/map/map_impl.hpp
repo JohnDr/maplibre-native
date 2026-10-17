@@ -135,7 +135,7 @@ public:
     // 3D terrain camera: a DEM sampler on this (map) thread, since the renderer's own one is not reachable from here.
     std::unique_ptr<TerrainTileManager> terrainElevation;
     double terrainElevationExaggeration = 1.0;
-    uint8_t terrainDemZoom = 14;
+    uint16_t terrainTileSize = 512; // the terrain source's tile size (sets the terrain tiles' zoom)
     bool terrainElevationApplied = false;
 };
 

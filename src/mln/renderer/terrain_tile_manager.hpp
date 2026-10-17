@@ -45,17 +45,44 @@ public:
     /// flat and the result is 0 metres.
     std::optional<double> sampleElevation(const LatLng& latLng, uint8_t zoom, uint8_t fallbackZoom);
 
+    /// GL JS `TerrainTileManager#deltaZoom`: the DEM tile of a terrain tile is one zoom level coarser, so the terrain
+    /// mesh and drape are denser than the DEM they sample (a terrain tile covers a quadrant of its DEM tile).
+    static constexpr uint8_t deltaZoom = 1;
+
+    /// GL JS `Terrain` tile cover zoom: `coveringTiles` with tile size `source tile size * 2^deltaZoom` and a
+    /// 512-pixel transform tile size, so `floor(zoom + log2(512 / (sourceTileSize * 2)))`, at most `maxTerrainZoom`.
+    static uint8_t terrainZoomFor(double mapZoom, uint16_t sourceTileSize);
+    static constexpr uint8_t maxTerrainZoom = 22;
+
+    /// The DEM source tile a terrain tile samples: `z - deltaZoom`, capped at the source's maximum zoom (GL JS
+    /// `getSourceTile`). Nullopt where the source has no tile (below its minimum zoom).
+    std::optional<CanonicalTileID> sourceTileFor(const CanonicalTileID& terrainTile) const;
+
+    /// A DEM tile a terrain tile samples, and where the terrain tile lies in it.
+    struct SourceTile {
+        std::shared_ptr<DEMData> data;
+        CanonicalTileID id;
+    };
+
+    /// The loaded DEM tile for a terrain tile (GL JS `getSourceTile(tileID, searchForDEM)`): the tile `sourceTileFor`
+    /// names, else, while that is loading, the nearest loaded ancestor. Requests the tile. Nullopt while nothing has
+    /// loaded.
+    std::optional<SourceTile> getSourceTile(const CanonicalTileID& terrainTile);
+
     /// The elevation range (metres) of the terrain in tile `id`: GL JS `Terrain#getMinMaxElevation`. Uses the loaded DEM
-    /// tile at `id`'s zoom, else the nearest loaded ancestor; nullopt when none has loaded. Never requests a tile.
+    /// tile of `id`, else the nearest loaded ancestor; nullopt when none has loaded. Never requests a tile.
     std::optional<std::pair<double, double>> getMinMaxElevation(const CanonicalTileID& id) const;
 
     /// Requests the DEM tile at `zoom` that contains `id` (a no-op when `id` is coarser), so that a coarse elevation
     /// range exists for the tile cover to use while the fine tiles are still unknown.
     void requestAncestor(const CanonicalTileID& id, uint8_t zoom);
 
-    /// The tile's request failed or returned no data recently (a source without tiles over open sea): the terrain there
-    /// is flat. False while it is loading and once it has loaded.
-    bool isMissing(const CanonicalTileID& id) const { return isFailed(id); }
+    /// The terrain tile's DEM tile request failed or returned no data recently (a source without tiles over open sea),
+    /// or the source has none: the terrain there is flat. False while it is loading and once it has loaded.
+    bool isMissing(const CanonicalTileID& terrainTile) const {
+        const auto source = sourceTileFor(terrainTile);
+        return !source || isFailed(*source);
+    }
 
     /// Tiles whose DEM border was changed by a neighbour's data since the last call (their meshes must be rebuilt so
     /// shared edges agree; GL JS `DEMData#backfillBorder`).
@@ -63,9 +90,6 @@ public:
 
     /// Whether any DEM tile has been loaded.
     bool hasData() const;
-
-    /// The DEM data for a tile, requesting it when necessary. Null until it has loaded.
-    std::shared_ptr<DEMData> getTileData(const CanonicalTileID& id) { return getDEMData(id); }
 
     /// Called when a tile finishes loading, so the map can schedule a repaint.
     void setOnTileLoaded(std::function<void()> callback) { onTileLoaded = std::move(callback); }
