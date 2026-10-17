@@ -20,6 +20,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <tuple>
 #include <string>
 #include <unordered_map>
@@ -115,6 +116,13 @@ public:
     LayerGroupBase* getGlobeDepthLayerGroup() const { return globeDepthPass.getLayerGroup(); }
 
     LayerGroupBase* getTerrainLayerGroup() const { return terrainPass.getLayerGroup(); }
+
+    // True when per-tile terrain drape targets exist: the drape-eligible layers are rendered into their textures and
+    // drawn by the terrain, so they must not also be drawn directly (their drawables are skipped); the remaining
+    // "live" layers (symbols) draw on top of the terrain.
+    bool isTerrainDrapeActive() const { return !terrainDrapeTargets.empty(); }
+    // Whether the style layer at this index is rendered into the terrain drape (GL JS `LAYERS_TO_TEXTURES`).
+    bool isDrapeLayer(int32_t layerIndex) const { return drapeLayerIndices.contains(layerIndex); }
 
     template <typename Func /* void(LayerGroupBase&) */>
     void visitLayerGroups(Func f) {
@@ -261,6 +269,13 @@ private:
     // Per-tile offscreen targets holding the map layers draped over the terrain, keyed by tile (z, x, y).
     std::map<std::tuple<uint8_t, uint32_t, uint32_t>, RenderTargetPtr> terrainDrapeTargets;
     std::uint8_t terrainDrapeZoom = 0;
+    // Per-tile fingerprint of the state the drape texture was rendered from; a tile is re-rendered only when it
+    // changes (style/source/image identity, zoom) or a source tile changed (`drapeGeneration`).
+    std::map<std::tuple<uint8_t, uint32_t, uint32_t>, uint64_t> terrainDrapeFingerprints;
+    std::set<std::tuple<uint8_t, uint32_t, uint32_t>> drapeTilesToRender;
+    uint64_t drapeGeneration = 0;
+    // Style layer indices rendered into the drape (background/fill/line/raster/hillshade/color-relief).
+    std::set<int32_t> drapeLayerIndices;
     RenderItem::DebugLayerGroupMap debugLayerGroups;
     GlobeDepthPass globeDepthPass;
     TerrainPass terrainPass;

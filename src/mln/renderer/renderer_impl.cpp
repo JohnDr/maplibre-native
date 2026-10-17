@@ -402,7 +402,16 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
 
         // draw layer groups, opaque pass: front to back with the depth buffer, except on the globe,
         // where 2D layers carry no depth and are painted bottom to top.
-        if (renderTreeParameters.transformParams.state.isGlobeRendering()) {
+        if (orchestrator.isTerrainDrapeActive()) {
+            // Drape-eligible opaque layers live in the per-tile textures; only the remaining layers draw here.
+            parameters.currentLayer = 0;
+            orchestrator.visitLayerGroupsReversed([&](LayerGroupBase& layerGroup) {
+                if (!orchestrator.isDrapeLayer(layerGroup.getLayerIndex())) {
+                    layerGroup.render(orchestrator, parameters);
+                }
+                parameters.currentLayer++;
+            });
+        } else if (renderTreeParameters.transformParams.state.isGlobeRendering()) {
             parameters.currentLayer = static_cast<uint32_t>(orchestrator.numLayerGroups()) - 1;
             orchestrator.visitLayerGroups([&](LayerGroupBase& layerGroup) {
                 layerGroup.render(orchestrator, parameters);
@@ -430,10 +439,21 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
             globeDepth->render(orchestrator, parameters);
         }
 
+        const bool drapeActive = orchestrator.isTerrainDrapeActive();
+
+        // When draping, the terrain is the ground: draw it first, then the "live" layers (symbols) on top.
+        if (drapeActive) {
+            if (auto* terrain = orchestrator.getTerrainLayerGroup()) {
+                terrain->render(orchestrator, parameters);
+            }
+        }
+
         // draw layer groups, translucent pass
         parameters.currentLayer = static_cast<uint32_t>(orchestrator.numLayerGroups()) - 1;
         orchestrator.visitLayerGroups([&](LayerGroupBase& layerGroup) {
-            layerGroup.render(orchestrator, parameters);
+            if (!drapeActive || !orchestrator.isDrapeLayer(layerGroup.getLayerIndex())) {
+                layerGroup.render(orchestrator, parameters);
+            }
             if (parameters.currentLayer > 0) {
                 parameters.currentLayer--;
             }
@@ -452,9 +472,11 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
             }
         }
 
-        // Terrain is drawn last, over the flat map, so the elevated surface is visible (draping lands later).
-        if (auto* terrain = orchestrator.getTerrainLayerGroup()) {
-            terrain->render(orchestrator, parameters);
+        // Without a drape, draw the terrain last, over the flat map, so the elevated surface is visible.
+        if (!drapeActive) {
+            if (auto* terrain = orchestrator.getTerrainLayerGroup()) {
+                terrain->render(orchestrator, parameters);
+            }
         }
     };
 

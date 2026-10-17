@@ -9,6 +9,8 @@
 #include <mln/gfx/upload_pass.hpp>
 #include <mln/util/projection.hpp>
 #include <mln/util/mat4.hpp>
+#include <cstdint>
+#include <cstring>
 #include <set>
 #include <mln/renderer/render_source.hpp>
 #include <mln/renderer/render_layer.hpp>
@@ -1018,11 +1020,35 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
     // Terrain drape: one tile-sized offscreen target per terrain tile, holding the draped map layers.
     const bool terrainEnabled = updateParameters->terrainTileset.has_value() &&
                                 !updateParameters->terrainTileset->tiles.empty();
+
+    // Layers rendered into the drape (GL JS `LAYERS_TO_TEXTURES`): background, fill, line, raster, hillshade,
+    // color-relief. Symbols and everything else stay "live" and draw on top of the terrain.
+    drapeLayerIndices.clear();
+    if (terrainEnabled) {
+        const auto& styleLayers = *updateParameters->layers;
+        for (std::size_t i = 0; i < styleLayers.size(); ++i) {
+            const char* type = styleLayers[i]->getTypeInfo()->type;
+            if (std::strcmp(type, "background") == 0 || std::strcmp(type, "fill") == 0 ||
+                std::strcmp(type, "line") == 0 || std::strcmp(type, "raster") == 0 ||
+                std::strcmp(type, "hillshade") == 0 || std::strcmp(type, "color-relief") == 0) {
+                drapeLayerIndices.insert(static_cast<int32_t>(i));
+            }
+        }
+    }
+
     if (terrainEnabled) {
         constexpr uint32_t drapeTileSize = 512;
         const auto& cover = terrainPass.getCover();
+        const uint64_t fingerprint = (reinterpret_cast<uintptr_t>(updateParameters->layers.get()) * 1000003ULL) ^
+                                     (reinterpret_cast<uintptr_t>(updateParameters->sources.get()) * 1000033ULL) ^
+                                     (reinterpret_cast<uintptr_t>(updateParameters->images.get()) * 1000037ULL) ^
+                                     (static_cast<uint64_t>(terrainDrapeZoom) << 32) ^
+                                     (static_cast<uint64_t>(layerGroupsByLayerIndex.size()) << 20) ^
+                                     (static_cast<uint64_t>(drapeLayerIndices.size()) << 8) ^ drapeGeneration;
+
         std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr> drapeTextures;
         std::set<std::tuple<uint8_t, uint32_t, uint32_t>> live;
+        drapeTilesToRender.clear();
         for (const auto& tileID : cover) {
             const auto c = tileID.canonical;
             const auto key = std::make_tuple(c.z, c.x, c.y);
@@ -1037,18 +1063,29 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
                 it = terrainDrapeTargets.emplace(key, rt).first;
             }
             for (auto& [index, layerGroup] : layerGroupsByLayerIndex) {
-                if (layerGroup) {
+                if (layerGroup && drapeLayerIndices.contains(index)) {
                     it->second->addLayerGroup(layerGroup, /*replace=*/true);
                 }
             }
             drapeTextures[key] = it->second->getTexture();
+            // Re-render only tiles that are new or whose source state changed.
+            const auto fpIt = terrainDrapeFingerprints.find(key);
+            if (fpIt == terrainDrapeFingerprints.end() || fpIt->second != fingerprint) {
+                drapeTilesToRender.insert(key);
+                terrainDrapeFingerprints[key] = fingerprint;
+            }
         }
         for (auto it = terrainDrapeTargets.begin(); it != terrainDrapeTargets.end();) {
             it = live.contains(it->first) ? std::next(it) : terrainDrapeTargets.erase(it);
         }
+        for (auto it = terrainDrapeFingerprints.begin(); it != terrainDrapeFingerprints.end();) {
+            it = live.contains(it->first) ? std::next(it) : terrainDrapeFingerprints.erase(it);
+        }
         terrainPass.applyDrapeTextures(drapeTextures);
     } else if (!terrainDrapeTargets.empty()) {
         terrainDrapeTargets.clear();
+        terrainDrapeFingerprints.clear();
+        drapeTilesToRender.clear();
         terrainPass.applyDrapeTextures({});
     }
 }
@@ -1089,14 +1126,15 @@ void RenderOrchestrator::uploadTerrainDrapeTargets(gfx::UploadPass& uploadPass) 
 }
 
 void RenderOrchestrator::renderTerrainDrapeTargets(const RenderTree& renderTree, PaintParameters& parameters) {
-    if (terrainDrapeTargets.empty()) {
+    if (drapeTilesToRender.empty()) {
         return;
     }
     const TransformState& state = parameters.transformParams.state;
     const double worldSize = Projection::worldSize(state.getScale());
 
-    for (auto& [key, renderTarget] : terrainDrapeTargets) {
-        if (!renderTarget) {
+    for (const auto& key : drapeTilesToRender) {
+        const auto it = terrainDrapeTargets.find(key);
+        if (it == terrainDrapeTargets.end() || !it->second) {
             continue;
         }
         const auto [z, x, y] = key;
@@ -1108,9 +1146,10 @@ void RenderOrchestrator::renderTerrainDrapeTargets(const RenderTree& renderTree,
         mat4 ortho;
         matrix::ortho(ortho, tx, tx + s, ty, ty + s, -1.0, 1.0);
         parameters.projMatrixOverride = ortho;
-        renderTarget->render(*this, renderTree, parameters);
+        it->second->render(*this, renderTree, parameters);
     }
     parameters.projMatrixOverride.reset();
+    drapeTilesToRender.clear();
 }
 
 void RenderOrchestrator::updateDebugLayerGroups(const RenderTree& renderTree, PaintParameters& parameters) {
@@ -1157,6 +1196,8 @@ void RenderOrchestrator::onTileError(RenderSource& source, const OverscaledTileI
 void RenderOrchestrator::onTileChanged(RenderSource&, const OverscaledTileID&) {
     MLN_TRACE_FUNC();
 
+    // A source tile changed: the drape textures may be stale.
+    ++drapeGeneration;
     observer->onInvalidate();
 }
 
