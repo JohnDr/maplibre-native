@@ -1143,8 +1143,10 @@ void RenderOrchestrator::renderTerrainDrapeTargets(const RenderTree& renderTree,
         const double tx = static_cast<double>(x) * s;
         const double ty = static_cast<double>(y) * s;
         // Orthographic projection mapping this tile's world extent to the render target's [-1, 1] clip space.
+        // Mercator world-y grows downward, and matrix::ortho maps its `top` arg to clip +1, so pass ty+s as
+        // bottom and ty as top to keep the imagery upright.
         mat4 ortho;
-        matrix::ortho(ortho, tx, tx + s, ty, ty + s, -1.0, 1.0);
+        matrix::ortho(ortho, tx, tx + s, ty + s, ty, -1.0, 1.0);
         parameters.projMatrixOverride = ortho;
         it->second->render(*this, renderTree, parameters);
     }
