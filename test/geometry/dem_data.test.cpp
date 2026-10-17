@@ -135,3 +135,27 @@ TEST(DEMData, BackfillNeighbor) {
     // backfulls BottomLeft neighbor
     EXPECT_TRUE(dem0.get(4, -1) == dem1.get(0, 3));
 };
+
+TEST(DEMData, GetElevationMatchesGetAtIntegerCoordinates) {
+    PremultipliedImage image = fakeImage({16, 16});
+    DEMData demdata(image, Tileset::RasterEncoding::Mapbox);
+
+    for (int32_t x = 0; x < 16; x++) {
+        for (int32_t y = 0; y < 16; y++) {
+            EXPECT_DOUBLE_EQ(demdata.getElevation(x, y), demdata.get(x, y));
+        }
+    }
+};
+
+TEST(DEMData, GetElevationBilinearMidpoint) {
+    PremultipliedImage image = fakeImage({16, 16});
+    DEMData demdata(image, Tileset::RasterEncoding::Mapbox);
+
+    for (int32_t x = 0; x < 15; x++) {
+        for (int32_t y = 0; y < 15; y++) {
+            const double expected = 0.25 * (demdata.get(x, y) + demdata.get(x + 1, y) + demdata.get(x, y + 1) +
+                                            demdata.get(x + 1, y + 1));
+            EXPECT_DOUBLE_EQ(demdata.getElevation(x + 0.5, y + 0.5), expected);
+        }
+    }
+};

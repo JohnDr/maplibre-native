@@ -1,6 +1,9 @@
 #include <mln/geometry/dem_data.hpp>
 #include <mln/math/clamp.hpp>
 
+#include <algorithm>
+#include <cmath>
+
 namespace mln {
 
 DEMData::DEMData(const PremultipliedImage& _image, Tileset::RasterEncoding _encoding)
@@ -91,6 +94,22 @@ int32_t DEMData::get(const int32_t x, const int32_t y) const {
     const auto& unpack = getUnpackVector();
     const uint8_t* value = image->data.get() + idx(x, y) * 4;
     return static_cast<int32_t>(value[0] * unpack[0] + value[1] * unpack[1] + value[2] * unpack[2] - unpack[3]);
+}
+
+double DEMData::getElevation(double x, double y) const {
+    x = std::clamp(x, 0.0, static_cast<double>(dim));
+    y = std::clamp(y, 0.0, static_cast<double>(dim));
+    const auto x0 = static_cast<int32_t>(std::floor(x));
+    const auto y0 = static_cast<int32_t>(std::floor(y));
+    const auto x1 = std::min(x0 + 1, dim);
+    const auto y1 = std::min(y0 + 1, dim);
+    const double u = x - x0;
+    const double v = y - y0;
+    const double z00 = static_cast<double>(get(x0, y0));
+    const double z10 = static_cast<double>(get(x1, y0));
+    const double z01 = static_cast<double>(get(x0, y1));
+    const double z11 = static_cast<double>(get(x1, y1));
+    return z00 * (1.0 - u) * (1.0 - v) + z10 * u * (1.0 - v) + z01 * (1.0 - u) * v + z11 * u * v;
 }
 
 const std::array<float, 4>& DEMData::getUnpackVector() const {

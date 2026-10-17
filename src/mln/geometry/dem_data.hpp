@@ -19,6 +19,10 @@ public:
     int32_t get(int32_t x, int32_t y) const;
     const std::array<float, 4>& getUnpackVector() const;
 
+    /// Bilinearly interpolated elevation, in metres, at the continuous tile coordinate (`x`, `y`) within `[0, dim]`.
+    /// Mirrors GL JS `DEMData#getElevation`, adapted to this class's one-pixel border.
+    double getElevation(double x, double y) const;
+
     const PremultipliedImage* getImage() const { return &*image; }
     const std::shared_ptr<PremultipliedImage>& getImagePtr() const { return image; }
 
