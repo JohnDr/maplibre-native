@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mln/renderer/layer_group.hpp>
+#include <mln/gfx/uniform_buffer.hpp>
 #include <mln/shaders/shader_program_base.hpp>
 #include <mln/util/tileset.hpp>
 
@@ -39,6 +40,7 @@ public:
 private:
     TileLayerGroupPtr layerGroup;
     gfx::ShaderProgramBasePtr shader;
+    gfx::UniformBufferPtr projectionUniformBuffer;
     std::unique_ptr<TerrainTileManager> terrain;
     std::optional<Tileset> tileset;
     std::function<void()> onTileLoaded;

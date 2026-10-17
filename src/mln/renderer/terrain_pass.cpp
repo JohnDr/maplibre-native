@@ -10,6 +10,7 @@
 #include <mln/gfx/shader_registry.hpp>
 #include <mln/gfx/uniform_buffer.hpp>
 #include <mln/map/transform_state.hpp>
+#include <mln/shaders/layer_ubo.hpp>
 #include <mln/renderer/globe_tile_mesh.hpp> // SegmentVector
 #include <mln/renderer/layer_tweaker.hpp>
 #include <mln/renderer/paint_parameters.hpp>
@@ -208,14 +209,36 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
 
     // Set the projection UBO here rather than in a tweaker: updateLayers runs before the upload pass, so the buffers
     // are uploaded with the current frame's matrices.
+    // UBO consolidation is on for Vulkan: the shader reads the layer group's shared projection buffer, indexed by
+    // each drawable's uboIndex. Populate it here, the way the layer tweakers' uploadProjectionUBOs does.
+    std::vector<shaders::ProjectionUBO> projectionUBOs;
+    projectionUBOs.reserve(layerGroup->getDrawableCount());
+    uint32_t uboIndex = 0;
     visitLayerGroupDrawables(*layerGroup, [&](gfx::Drawable& drawable) {
         if (!drawable.getTileID()) {
             return;
         }
-        const auto ubo = LayerTweaker::toProjectionUBO(
-            paintParameters.projectionDataForTile(drawable.getTileID()->toUnwrapped()));
-        drawable.mutableUniformBuffers().createOrUpdate(shaders::idProjectionUBO, &ubo, paintParameters.context);
+        drawable.setUBOIndex(uboIndex++);
+        const auto tileID = drawable.getTileID()->toUnwrapped();
+        auto pd = paintParameters.projectionDataForTile(tileID);
+        mat4 tileMatrix;
+        paintParameters.state.matrixFor(tileMatrix, tileID);
+        mat4 composed;
+        matrix::multiply(composed, paintParameters.transformParams.projMatrix, tileMatrix);
+        pd.mainMatrix = composed;
+        pd.fallbackMatrix = composed;
+        projectionUBOs.emplace_back(LayerTweaker::toProjectionUBO(pd));
     });
+
+    if (!projectionUBOs.empty()) {
+        const std::size_t size = sizeof(shaders::ProjectionUBO) * projectionUBOs.size();
+        if (!projectionUniformBuffer || projectionUniformBuffer->getSize() < size) {
+            projectionUniformBuffer = context.createUniformBuffer(projectionUBOs.data(), size, false, true);
+        } else {
+            projectionUniformBuffer->update(projectionUBOs.data(), size);
+        }
+        layerGroup->mutableUniformBuffers().set(shaders::idProjectionUBO, projectionUniformBuffer);
+    }
 }
 
 } // namespace mln
