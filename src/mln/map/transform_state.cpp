@@ -899,12 +899,14 @@ ScreenCoordinate TransformState::latLngToScreenCoordinate(const LatLng& latLng, 
     }
 
     Point<double> pt = projection->project(latLng, scale) / util::tileSize_D;
-    vec4 c = {{pt.x, pt.y, 0, 1}};
+    vec4 c = {{pt.x, pt.y, z / util::tileSize_D, 1}}; // on the plane through the centre (see screenCoordinateToTileCoordinate)
     matrix::transformMat4(p, c, getCoordMatrix());
     return {p[0] / p[3], size.height - p[1] / p[3]};
 }
 
-TileCoordinate TransformState::screenCoordinateToTileCoordinate(const ScreenCoordinate& point, uint8_t atZoom) const {
+TileCoordinate TransformState::screenCoordinateToTileCoordinate(const ScreenCoordinate& point,
+                                                                uint8_t atZoom,
+                                                                bool onCenterPlane) const {
     if (size.isEmpty()) {
         return {.p = {}, .z = 0};
     }
@@ -917,7 +919,8 @@ TileCoordinate TransformState::screenCoordinateToTileCoordinate(const ScreenCoor
         return {.p = {p.x, p.y}, .z = static_cast<double>(atZoom)};
     }
 
-    float targetZ = 0;
+    // z is the centre altitude in pixels; the matrices take tile units (pixels / tile size).
+    const float targetZ = onCenterPlane ? static_cast<float>(z / util::tileSize_D) : 0.0f;
 
     double flippedY = size.height - point.y;
 
@@ -950,7 +953,7 @@ LatLng TransformState::screenCoordinateToLatLng(const ScreenCoordinate& point, L
     if (isGlobeRendering()) {
         return VerticalPerspectiveProjection::screenCoordinateToLatLng(*this, point, wrapMode);
     }
-    auto coord = screenCoordinateToTileCoordinate(point, 0);
+    auto coord = screenCoordinateToTileCoordinate(point, 0, true);
     return projection->unproject(coord.p, 1. / util::tileSize_D, wrapMode);
 }
 

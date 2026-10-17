@@ -4,6 +4,9 @@
 #include <mln/storage/file_source.hpp>
 #include <mln/style/style_impl.hpp>
 #include <mln/style/projection_impl.hpp>
+#include <algorithm>
+
+#include <mln/renderer/terrain_tile_manager.hpp>
 #include <mln/style/terrain.hpp>
 #include <mln/style/source.hpp>
 #include <mln/style/sources/tile_source.hpp>
@@ -118,6 +121,7 @@ void Map::Impl::onUpdate() {
     TimePoint timePoint = mode == MapMode::Continuous ? Clock::now() : Clock::time_point::max();
 
     transform.updateTransitions(timePoint);
+    updateTerrainCamera();
     transform.setProjectionDefinition(
         style->impl->getProjection()->impl->evaluate(static_cast<float>(transform.getZoom())));
 
@@ -161,6 +165,68 @@ void Map::Impl::onUpdate() {
     }
 
     rendererFrontend.update(std::make_shared<UpdateParameters>(std::move(params)));
+}
+
+std::optional<double> Map::Impl::terrainElevationAt(const LatLng& latLng) {
+    if (!terrainElevation) {
+        return std::nullopt;
+    }
+    constexpr uint8_t coarseZoom = 9; // answers quickly while the fine tile is still loading
+    return terrainElevation->sampleElevation(latLng.wrapped(), terrainDemZoom, std::min(coarseZoom, terrainDemZoom));
+}
+
+void Map::Impl::updateTerrainCamera() {
+    // The enabled terrain's DEM tileset, if any (same lookup as the renderer's UpdateParameters below).
+    const Tileset* tileset = nullptr;
+    double exaggeration = 1.0;
+    if (style) {
+        if (auto* terrain = style->impl->getTerrain(); terrain != nullptr && terrain->isEnabled()) {
+            if (auto* source = style->impl->getSource(terrain->getSource());
+                source != nullptr && source->getType() == style::SourceType::RasterDEM) {
+                const auto& urlOrTileset = static_cast<style::TileSource*>(source)->getURLOrTileset();
+                if (urlOrTileset.is<Tileset>()) {
+                    tileset = &urlOrTileset.get<Tileset>();
+                    exaggeration = terrain->getExaggeration();
+                }
+            }
+        }
+    }
+
+    if (tileset == nullptr || tileset->tiles.empty()) {
+        terrainElevation.reset();
+        if (terrainElevationApplied) {
+            // Terrain was switched off: put the centre back on the flat map.
+            transform.setElevation(0.0);
+            terrainElevationApplied = false;
+        }
+        return;
+    }
+
+    if (!terrainElevation) {
+        terrainElevation = std::make_unique<TerrainTileManager>(fileSource.get(), *tileset);
+        terrainElevation->setOnTileLoaded([this]() { onUpdate(); });
+    } else {
+        terrainElevation->setTileset(*tileset);
+    }
+    terrainElevationExaggeration = exaggeration;
+    terrainDemZoom = std::min<uint8_t>(tileset->zoomRange.max, 14);
+
+    // While the DEM under the centre is still loading, leave the camera alone rather than snap it to sea level.
+    const auto centreElevation = terrainElevationAt(transform.getLatLng());
+    if (!centreElevation) {
+        return;
+    }
+    transform.setElevation(*centreElevation * exaggeration);
+    terrainElevationApplied = true;
+
+    // Never let the camera sink into the terrain. The margin keeps the near plane clear of the surface.
+    constexpr double marginMeters = 2.0;
+    transform.raiseCameraAboveTerrain(
+        [this, exaggeration](const LatLng& latLng) -> std::optional<double> {
+            const auto elevation = terrainElevationAt(latLng);
+            return elevation ? std::optional<double>(*elevation * exaggeration) : std::nullopt;
+        },
+        marginMeters);
 }
 
 void Map::Impl::onStyleLoading() {

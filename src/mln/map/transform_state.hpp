@@ -272,7 +272,11 @@ public:
     ScreenCoordinate latLngToScreenCoordinate(const LatLng&, vec4&) const;
     LatLng screenCoordinateToLatLng(const ScreenCoordinate&, LatLng::WrapMode = LatLng::Unwrapped) const;
     // Implements mapbox-gl-js pointCoordinate() : MercatorCoordinate.
-    TileCoordinate screenCoordinateToTileCoordinate(const ScreenCoordinate&, uint8_t atZoom) const;
+    /// With `onCenterPlane`, the point is unprojected onto the horizontal plane through the map centre (at its altitude,
+    /// i.e. the terrain height under it) instead of onto sea level, so the centre pixel maps back to the centre.
+    TileCoordinate screenCoordinateToTileCoordinate(const ScreenCoordinate&,
+                                                    uint8_t atZoom,
+                                                    bool onCenterPlane = false) const;
 
     double zoomScale(double zoom) const;
     double scaleZoom(double scale) const;

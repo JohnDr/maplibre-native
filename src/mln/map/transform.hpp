@@ -101,6 +101,15 @@ public:
     void setElevation(double);
     /** The camera's altitude above sea level, in metres. */
     double getCameraAltitude() const;
+    /**
+     * Keeps the camera out of the terrain (GL JS's `_raiseCameraByPitchAndZoom`). `elevationAt` returns the drawn
+     * terrain height in metres (exaggeration included) at a position, or nullopt where it is not loaded. When terrain
+     * at or around the camera is above it, the camera is raised by the overlap plus `marginMeters` with its position
+     * and the map centre fixed, and pitch and zoom are re-solved from the new camera-to-centre vector. Returns whether
+     * the camera changed.
+     */
+    bool raiseCameraAboveTerrain(const std::function<std::optional<double>(const LatLng&)>& elevationAt,
+                                 double marginMeters);
 
     // North Orientation
     void setProjectionDefinition(const ProjectionDefinition&);

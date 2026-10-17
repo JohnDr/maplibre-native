@@ -481,6 +481,18 @@ std::string Map::getTerrainSource() const {
     return {};
 }
 
+std::optional<double> Map::queryTerrainElevation(const LatLng& latLng) const {
+    return impl->terrainElevationAt(latLng);
+}
+
+double Map::getElevation() const {
+    return impl->transform.getElevation();
+}
+
+double Map::getCameraAltitude() const {
+    return impl->transform.getCameraAltitude();
+}
+
 double Map::getTerrainExaggeration() const {
     if (auto* terrain = impl->style ? impl->style->getTerrain() : nullptr) {
         return terrain->getExaggeration();

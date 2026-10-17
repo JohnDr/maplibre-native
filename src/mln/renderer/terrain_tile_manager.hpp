@@ -4,10 +4,12 @@
 #include <mln/util/geo.hpp>
 #include <mln/util/tileset.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <tuple>
 
 namespace mln {
@@ -34,6 +36,13 @@ public:
     /// is missing, and returns 0 until it has loaded.
     double getElevation(const LatLng& latLng, uint8_t zoom);
 
+    /// The elevation in metres at `latLng`, or nullopt while the DEM covering it is still loading. Unlike
+    /// `getElevation` this tells "not loaded yet" apart from sea level. Samples the tile at `zoom`; until that has
+    /// loaded it falls back to the tile at `fallbackZoom` (requested too, so a coarse answer arrives quickly), when
+    /// that is coarser. When every tile it tried definitively has no data (a failed request), the terrain there is
+    /// flat and the result is 0 metres.
+    std::optional<double> sampleElevation(const LatLng& latLng, uint8_t zoom, uint8_t fallbackZoom);
+
     /// Whether any DEM tile has been loaded.
     bool hasData() const;
 
@@ -51,7 +60,17 @@ private:
     struct Entry {
         std::shared_ptr<DEMData> data;
         std::unique_ptr<AsyncRequest> request;
+        /// The last request failed or returned no data (for example a DEM tile that does not exist over open ocean).
+        /// The tile is not requested again before `kRetryDelay` has passed, so a missing tile cannot cause a request
+        /// storm.
+        bool failed = false;
+        std::chrono::steady_clock::time_point failedAt;
     };
+
+    static constexpr std::chrono::seconds kRetryDelay{20};
+
+    /// Whether the tile's last request failed recently enough that it will not be retried yet.
+    bool isFailed(const CanonicalTileID&) const;
 
     void startRequest(const CanonicalTileID&);
     void onTileResponse(const CanonicalTileID&, const Response&, Tileset::RasterEncoding);

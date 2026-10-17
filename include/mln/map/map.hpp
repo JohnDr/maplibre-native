@@ -127,6 +127,13 @@ public:
     bool hasTerrain() const;
     std::string getTerrainSource() const;
     double getTerrainExaggeration() const;
+    /// The terrain height in metres at `latLng`, without the exaggeration; nullopt while its DEM tile has not loaded or
+    /// when there is no terrain.
+    std::optional<double> queryTerrainElevation(const LatLng&) const;
+    /// The camera centre's altitude in metres above sea level (the terrain height under it, exaggeration included).
+    double getElevation() const;
+    /// The camera's own altitude in metres above sea level.
+    double getCameraAltitude() const;
 
     // Projection
     ScreenCoordinate pixelForLatLng(const LatLng&) const;

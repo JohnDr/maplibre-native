@@ -19,6 +19,7 @@
 namespace mln {
 
 class FileSource;
+class TerrainTileManager;
 class ResourceTransform;
 
 namespace gfx {
@@ -86,6 +87,12 @@ public:
     // Map
     void jumpTo(const CameraOptions&);
 
+    /// 3D terrain: the drawn terrain height at `latLng` in metres, without the exaggeration, or nullopt where it is
+    /// not loaded (or there is no terrain). Fetches the DEM tiles it needs.
+    std::optional<double> terrainElevationAt(const LatLng&);
+    /// 3D terrain: sets the camera centre's altitude from the terrain under it and keeps the camera out of the terrain.
+    void updateTerrainCamera();
+
     bool isRenderingStatsViewEnabled() const;
     void enableRenderingStatsView(bool value);
 
@@ -124,6 +131,12 @@ public:
 
     // CFID: custom backdrop colour applied to the render-tree background.
     std::optional<Color> backgroundColor;
+
+    // 3D terrain camera: a DEM sampler on this (map) thread, since the renderer's own one is not reachable from here.
+    std::unique_ptr<TerrainTileManager> terrainElevation;
+    double terrainElevationExaggeration = 1.0;
+    uint8_t terrainDemZoom = 14;
+    bool terrainElevationApplied = false;
 };
 
 // Forward declaration of this method is required for the MapProjection class

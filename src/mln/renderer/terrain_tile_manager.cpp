@@ -40,6 +40,10 @@ TerrainTileManager::TerrainTileManager(FileSource* fileSource_, Tileset tileset_
 TerrainTileManager::~TerrainTileManager() = default;
 
 void TerrainTileManager::setTileset(Tileset tileset_) {
+    // Tiles of a different tile source are not interchangeable; keep them only while the source stays the same.
+    if (tileset.tiles != tileset_.tiles) {
+        tiles.clear();
+    }
     tileset = std::move(tileset_);
 }
 
@@ -66,6 +70,29 @@ double TerrainTileManager::getElevation(const LatLng& latLng, uint8_t zoom) {
     return data->getElevation((x - id.x) * dim, (y - id.y) * dim);
 }
 
+std::optional<double> TerrainTileManager::sampleElevation(const LatLng& latLng, uint8_t zoom, uint8_t fallbackZoom) {
+    bool stillLoading = false;
+    const uint8_t zooms[2] = {zoom, fallbackZoom};
+    for (int i = 0; i < 2; ++i) {
+        const uint8_t z = zooms[i];
+        if (i == 1 && z >= zoom) {
+            break; // no coarser fallback
+        }
+        const CanonicalTileID id = tileFor(latLng, z);
+        if (const auto data = getDEMData(id)) {
+            double x;
+            double y;
+            tileCoordinate(latLng, z, x, y);
+            const double dim = static_cast<double>(data->dim);
+            return data->getElevation((x - id.x) * dim, (y - id.y) * dim);
+        }
+        if (!isFailed(id)) {
+            stillLoading = true;
+        }
+    }
+    return stillLoading ? std::nullopt : std::optional<double>(0.0);
+}
+
 bool TerrainTileManager::hasData() const {
     for (const auto& [key, entry] : tiles) {
         if (entry.data) {
@@ -83,10 +110,16 @@ std::shared_ptr<DEMData> TerrainTileManager::getDEMData(const CanonicalTileID& i
     if (it->second.data) {
         return it->second.data;
     }
-    if (!it->second.request) {
+    if (!it->second.request && !isFailed(id)) {
         startRequest(id);
     }
     return nullptr;
+}
+
+bool TerrainTileManager::isFailed(const CanonicalTileID& id) const {
+    const auto it = tiles.find(keyFor(id));
+    return it != tiles.end() && it->second.failed &&
+           std::chrono::steady_clock::now() - it->second.failedAt < kRetryDelay;
 }
 
 void TerrainTileManager::startRequest(const CanonicalTileID& id) {
@@ -123,8 +156,11 @@ void TerrainTileManager::onTileResponse(const CanonicalTileID& id,
     it->second.request.reset();
 
     if (res.error || !res.data) {
+        it->second.failed = true;
+        it->second.failedAt = std::chrono::steady_clock::now();
         return;
     }
+    it->second.failed = false;
 
     try {
         PremultipliedImage image = decodeImage(*res.data);

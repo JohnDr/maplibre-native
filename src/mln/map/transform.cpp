@@ -13,7 +13,8 @@
 #include <mln/util/logging.hpp>
 #include <mln/util/platform.hpp>
 
-#include <cstdio>
+#include <algorithm>
+#include <limits>
 #include <utility>
 #include <numbers>
 
@@ -541,6 +542,74 @@ void Transform::setElevation(double elevation) {
 
 double Transform::getCameraAltitude() const {
     return state.getCameraAltitude();
+}
+
+bool Transform::raiseCameraAboveTerrain(const std::function<std::optional<double>(const LatLng&)>& elevationAt,
+                                        double marginMeters) {
+    if (state.isGlobeRendering()) {
+        return false;
+    }
+
+    const LatLng centre = state.getLatLng(LatLng::Unwrapped);
+    const double zoom = state.getZoom();
+    const double pitch = state.getPitch();
+    const double compass = -state.getBearing(); // the state stores the bearing negated
+    const double metersPerPixel = Projection::getMetersPerPixelAtLatitude(centre.latitude(), zoom);
+    const double toCenterPx = state.getCameraToCenterDistance();
+    const double distance = toCenterPx * metersPerPixel; // camera to centre, metres
+    const double centreAlt = state.getCenterAltitude();
+    const double horizontal = distance * std::sin(pitch);
+    const double cameraAlt = centreAlt + distance * std::cos(pitch);
+
+    // Terrain tops out below ~9 km (times the exaggeration); a camera far above that cannot be inside it.
+    constexpr double farAboveTerrain = 30000.0;
+    if (cameraAlt > farAboveTerrain) {
+        return false;
+    }
+
+    // The camera's position: behind the centre, against the view direction.
+    const double metersPerDegreeLat = util::deg2rad(util::EARTH_RADIUS_M);
+    const double metersPerDegreeLon = metersPerDegreeLat * std::cos(util::deg2rad(centre.latitude()));
+    if (metersPerDegreeLon < 1.0) {
+        return false;
+    }
+    const double east = -horizontal * std::sin(compass);
+    const double north = -horizontal * std::cos(compass);
+    const LatLng camera{centre.latitude() + north / metersPerDegreeLat, centre.longitude() + east / metersPerDegreeLon};
+
+    // Terrain at the camera and on a ring around it (the near frustum), whichever is highest.
+    const double ring = std::max(0.15 * distance, 10.0);
+    double overlap = -std::numeric_limits<double>::infinity();
+    const auto probe = [&](double dEast, double dNorth) {
+        const LatLng at{camera.latitude() + dNorth / metersPerDegreeLat, camera.longitude() + dEast / metersPerDegreeLon};
+        if (const auto elevation = elevationAt(at.wrapped())) {
+            overlap = std::max(overlap, *elevation + marginMeters - cameraAlt);
+        }
+    };
+    probe(0.0, 0.0);
+    for (int i = 0; i < 8; ++i) {
+        const double angle = i * std::numbers::pi / 4.0;
+        probe(ring * std::sin(angle), ring * std::cos(angle));
+    }
+    if (!(overlap > 0.0)) {
+        return false;
+    }
+
+    // Raise the camera by the overlap; the centre stays put. The new camera-to-centre vector gives pitch and zoom.
+    const double newHeight = cameraAlt + overlap - centreAlt;
+    const double newPitch = std::max(std::atan2(horizontal, newHeight), state.getMinPitch());
+    const double newDistance = std::hypot(horizontal, newHeight);
+    const double newMetersPerPixel = newDistance / toCenterPx;
+    const double equatorMetersPerPixelAtZoom0 = std::cos(util::deg2rad(centre.latitude())) * util::M2PI *
+                                                util::EARTH_RADIUS_M / util::tileSize_D;
+    const double newZoom = util::clamp(std::log2(equatorMetersPerPixelAtZoom0 / newMetersPerPixel),
+                                       state.getMinZoomAtLatitude(centre.latitude()),
+                                       state.getMaxZoom());
+
+    state.setLatLngZoom(centre, newZoom);
+    state.setPitch(newPitch);
+    state.setCenterAltitude(centreAlt); // the stored altitude is in pixels, which changed with the zoom
+    return true;
 }
 
 // MARK: - North Orientation
