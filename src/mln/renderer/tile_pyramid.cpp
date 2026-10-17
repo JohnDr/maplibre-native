@@ -184,9 +184,13 @@ void TilePyramid::update(const std::vector<Immutable<style::LayerProperties>>& l
     // levels. Child tiles are used from the cache, but not created.
     std::optional<util::TileRange> tileRange = std::nullopt;
     if (bounds) {
-        int32_t maxZoom = (parameters.tileLodMode == TileLodMode::Distance)
-                              ? zoomRange.max
-                              : std::min(tileZoom, static_cast<int32_t>(zoomRange.max));
+        // The cover may request tiles finer than the nominal covering zoom (the globe's
+        // variable-zoom / level-of-detail path), so the bounds guard must span the full
+        // source zoom range or those tiles get rejected and the view renders empty.
+        const bool variableZoom = parameters.transformState.isGlobeRendering() ||
+                                  parameters.tileLodMode == TileLodMode::Distance;
+        int32_t maxZoom = variableZoom ? static_cast<int32_t>(zoomRange.max)
+                                       : std::min(tileZoom, static_cast<int32_t>(zoomRange.max));
         tileRange = util::TileRange::fromLatLngBounds(*bounds, zoomRange.min, maxZoom);
     }
     auto createTileFn = [&](const OverscaledTileID& tileID) -> Tile* {

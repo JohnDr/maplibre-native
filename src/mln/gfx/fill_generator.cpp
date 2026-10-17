@@ -37,6 +37,47 @@ struct GeometryTooLongException : std::exception {};
 
 namespace {
 
+// Clips a ring to a half-plane (axis 0=x, 1=y) via Sutherland-Hodgman.
+GeometryCoordinates clipRingToHalfPlane(const GeometryCoordinates& ring, int axis, double bound, bool keepGreater) {
+    GeometryCoordinates out;
+    const std::size_t n = ring.size();
+    if (n == 0) return out;
+    for (std::size_t i = 0; i < n; i++) {
+        const GeometryCoordinate& cur = ring[i];
+        const GeometryCoordinate& prev = ring[(i + n - 1) % n];
+        const double curVal = axis == 0 ? cur.x : cur.y;
+        const double prevVal = axis == 0 ? prev.x : prev.y;
+        const bool curIn = keepGreater ? curVal >= bound : curVal <= bound;
+        const bool prevIn = keepGreater ? prevVal >= bound : prevVal <= bound;
+        if (curIn != prevIn) {
+            const double t = (bound - prevVal) / (curVal - prevVal);
+            out.emplace_back(static_cast<int16_t>(std::lround(prev.x + t * (cur.x - prev.x))),
+                             static_cast<int16_t>(std::lround(prev.y + t * (cur.y - prev.y))));
+        }
+        if (curIn) {
+            out.push_back(cur);
+        }
+    }
+    return out;
+}
+
+// Clips a polygon (all rings) to the tile bounds [0, EXTENT] on both axes. Without this the globe
+// subdivision grid can place vertices up to a cell past the tile edge (the tile buffer rounds up to
+// the next grid line), so neighbouring tiles overlap over that strip and both draw it - a darker band
+// along the tile edge. GL JS clips the fill geometry to the tile before subdividing.
+GeometryCollection clipPolygonToTile(const GeometryCollection& polygon) {
+    GeometryCollection result;
+    result.reserve(polygon.size());
+    for (const auto& ring : polygon) {
+        GeometryCoordinates r = clipRingToHalfPlane(ring, 0, 0.0, true);
+        r = clipRingToHalfPlane(r, 0, static_cast<double>(util::EXTENT), false);
+        r = clipRingToHalfPlane(r, 1, 0.0, true);
+        r = clipRingToHalfPlane(r, 1, static_cast<double>(util::EXTENT), false);
+        result.push_back(std::move(r));
+    }
+    return result;
+}
+
 std::size_t addRingVertices(gfx::VertexVector<FillLayoutVertex>& vertices, const GeometryCoordinates& ring) {
     for (auto& point : ring) {
         vertices.emplace_back(FillBucket::layoutVertex(point));
@@ -131,10 +172,28 @@ void addSubdividedPolygon(const util::SubdivisionResult& subdivided,
         }
         auto& lineSegment = lineSegments.back();
         const auto base = static_cast<uint16_t>(lineSegment.vertexLength);
+        std::size_t emitted = 0;
         for (std::size_t i = 0; i + 1 < line.size(); i += 2) {
-            lineIndexes.emplace_back(static_cast<uint16_t>(base + line[i]), static_cast<uint16_t>(base + line[i + 1]));
+            const uint32_t i0 = line[i];
+            const uint32_t i1 = line[i + 1];
+            // Skip outline segments lying along the tile's boundary (x or y == 0 / EXTENT).
+            // These are artifacts of clipping the fill to the tile, not real polygon edges. Both
+            // neighbouring tiles would otherwise stroke the shared edge, doubling into a darker line.
+            const bool onLeftEdge =
+                subdivided.vertices[i0 * 2] == 0 && subdivided.vertices[i1 * 2] == 0;
+            const bool onRightEdge = subdivided.vertices[i0 * 2] == util::EXTENT &&
+                                     subdivided.vertices[i1 * 2] == util::EXTENT;
+            const bool onBottomEdge =
+                subdivided.vertices[i0 * 2 + 1] == 0 && subdivided.vertices[i1 * 2 + 1] == 0;
+            const bool onTopEdge = subdivided.vertices[i0 * 2 + 1] == util::EXTENT &&
+                                   subdivided.vertices[i1 * 2 + 1] == util::EXTENT;
+            if (onLeftEdge || onRightEdge || onBottomEdge || onTopEdge) {
+                continue;
+            }
+            lineIndexes.emplace_back(static_cast<uint16_t>(base + i0), static_cast<uint16_t>(base + i1));
+            ++emitted;
         }
-        lineSegment.indexLength += line.size();
+        lineSegment.indexLength += emitted * 2;
     }
     if (!lineSegments.empty()) {
         lineSegments.back().vertexLength += totalVertices;
@@ -176,7 +235,7 @@ void generateFillAndOutineBuffers(const GeometryCollection& geometry,
         limitHoles(polygon, 500);
 
         if (subdivisionGranularity >= 2) {
-            addSubdividedPolygon(util::subdividePolygonWithinLimit(polygon,
+            addSubdividedPolygon(util::subdividePolygonWithinLimit(clipPolygonToTile(polygon),
                                                                    canonical,
                                                                    subdivisionGranularity,
                                                                    /*generateOutlineLines=*/true,
