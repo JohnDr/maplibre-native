@@ -186,10 +186,11 @@ void TilePyramid::update(const std::vector<Immutable<style::LayerProperties>>& l
     std::optional<util::TileRange> tileRange = std::nullopt;
     if (bounds) {
         // The cover may request tiles finer than the nominal covering zoom (the globe's
-        // variable-zoom / level-of-detail path), so the bounds guard must span the full
-        // source zoom range or those tiles get rejected and the view renders empty.
+        // variable-zoom / level-of-detail path, and the terrain's near-field tiles), so the bounds guard must span
+        // the full source zoom range or those tiles get rejected and the view renders without them.
         const bool variableZoom = parameters.transformState.isGlobeRendering() ||
-                                  parameters.tileLodMode == TileLodMode::Distance;
+                                  parameters.tileLodMode == TileLodMode::Distance ||
+                                  tileCoverParameters.terrainVariableZoom;
         int32_t maxZoom = variableZoom ? static_cast<int32_t>(zoomRange.max)
                                        : std::min(tileZoom, static_cast<int32_t>(zoomRange.max));
         tileRange = util::TileRange::fromLatLngBounds(*bounds, zoomRange.min, maxZoom);

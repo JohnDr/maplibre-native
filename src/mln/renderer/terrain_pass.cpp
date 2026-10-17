@@ -40,11 +40,6 @@ constexpr std::string_view TerrainShaderName = "TerrainShader";
 constexpr std::size_t TerrainGridSegments = 128;
 constexpr std::size_t TerrainGridPoints = TerrainGridSegments + 1;
 
-// A light pointing from the north-west, 45 degrees up.
-constexpr double LightX = -0.7071067811865476 * 0.7071067811865476;
-constexpr double LightY = -0.7071067811865476 * 0.7071067811865476;
-constexpr double LightZ = 0.7071067811865476;
-
 struct TerrainMesh {
     std::vector<uint8_t> vertices;
     std::size_t vertexCount = 0;
@@ -52,7 +47,8 @@ struct TerrainMesh {
 };
 
 /// Builds a grid over one DEM tile: xy in tile units (0..EXTENT), z the elevation in metres (the camera's
-/// world-to-camera matrix scales z by pixels-per-metre, like every 3D layer), w a hillshade.
+/// world-to-camera matrix scales z by pixels-per-metre, like every 3D layer). The relief shading comes from the draped
+/// hillshade layer, as in GL JS; the mesh carries none.
 TerrainMesh buildTerrainMesh(const DEMData* dem, double exaggeration, const CanonicalTileID& tile) {
     // A null `dem` is a tile the source does not have (open sea): flat at sea level, as GL JS treats missing DEM.
     const std::size_t n = TerrainGridPoints;
@@ -61,7 +57,6 @@ TerrainMesh buildTerrainMesh(const DEMData* dem, double exaggeration, const Cano
     const double tilesAcross = static_cast<double>(1ull << tile.z);
     const double tileLat = std::atan(std::sinh(std::numbers::pi * (1.0 - 2.0 * (tile.y + 0.5) / tilesAcross)));
     const double metersPerTile = util::M2PI * util::EARTH_RADIUS_M * std::cos(tileLat) / tilesAcross;
-    const double pixelMeters = metersPerTile / dim;
     const double extent = static_cast<double>(util::EXTENT);
 
     std::vector<double> elevation(n * n);
@@ -73,32 +68,16 @@ TerrainMesh buildTerrainMesh(const DEMData* dem, double exaggeration, const Cano
         }
     }
 
-    // Slopes straight from the DEM one pixel either side, so the hillshade at a tile edge uses the neighbour's pixels
-    // (the backfilled border) and matches across the seam; grid neighbours would clamp at the edge.
-    const auto demElevation = [&](double x, double y) {
-        return dem != nullptr ? dem->getElevation(std::clamp(x, -1.0, dim), std::clamp(y, -1.0, dim)) : 0.0;
-    };
-
     TerrainMesh mesh;
-    mesh.vertices.resize(n * n * 4 * sizeof(float));
+    mesh.vertices.resize(n * n * 3 * sizeof(float));
     auto* out = reinterpret_cast<float*>(mesh.vertices.data());
     for (std::size_t j = 0; j < n; j++) {
         for (std::size_t i = 0; i < n; i++) {
             const double e = elevation[j * n + i];
-            const double px = static_cast<double>(i) / static_cast<double>(TerrainGridSegments) * dim;
-            const double py = static_cast<double>(j) / static_cast<double>(TerrainGridSegments) * dim;
-            const double dzdx = (demElevation(px + 1.0, py) - demElevation(px - 1.0, py)) / (2.0 * pixelMeters);
-            const double dzdy = (demElevation(px, py + 1.0) - demElevation(px, py - 1.0)) / (2.0 * pixelMeters);
-            const double length = std::sqrt(dzdx * dzdx + dzdy * dzdy + 1.0);
-            // normal . light, with normal = (-dzdx, -dzdy, 1) / length
-            const double diffuse = std::clamp((LightX * -dzdx + LightY * -dzdy + LightZ) / length, 0.0, 1.0);
-            const double shade = 0.35 + 0.65 * diffuse;
-
-            float* vertex = out + (j * n + i) * 4;
+            float* vertex = out + (j * n + i) * 3;
             vertex[0] = static_cast<float>(static_cast<double>(i) / static_cast<double>(TerrainGridSegments) * extent);
             vertex[1] = static_cast<float>(static_cast<double>(j) / static_cast<double>(TerrainGridSegments) * extent);
             vertex[2] = static_cast<float>(e * exaggeration);
-            vertex[3] = static_cast<float>(shade);
         }
     }
     mesh.vertexCount = n * n;
@@ -107,7 +86,7 @@ TerrainMesh buildTerrainMesh(const DEMData* dem, double exaggeration, const Cano
     // meet (their edge vertices differ) are covered. GL JS uses a fifth of the tile width.
     const double skirtMeters = metersPerTile / 5.0;
     const std::size_t skirtVertexBase = mesh.vertexCount;
-    mesh.vertices.resize((n * n + 4 * n) * 4 * sizeof(float));
+    mesh.vertices.resize((n * n + 4 * n) * 3 * sizeof(float));
     out = reinterpret_cast<float*>(mesh.vertices.data());
     // Edge vertex indices, per side, in order along the edge.
     const auto edgeIndex = [&](int side, std::size_t k) -> std::size_t {
@@ -120,12 +99,11 @@ TerrainMesh buildTerrainMesh(const DEMData* dem, double exaggeration, const Cano
     };
     for (int side = 0; side < 4; ++side) {
         for (std::size_t k = 0; k < n; ++k) {
-            const float* src = out + edgeIndex(side, k) * 4;
-            float* dst = out + (skirtVertexBase + static_cast<std::size_t>(side) * n + k) * 4;
+            const float* src = out + edgeIndex(side, k) * 3;
+            float* dst = out + (skirtVertexBase + static_cast<std::size_t>(side) * n + k) * 3;
             dst[0] = src[0];
             dst[1] = src[1];
             dst[2] = src[2] - static_cast<float>(skirtMeters);
-            dst[3] = src[3];
         }
     }
     mesh.vertexCount = n * n + 4 * n;
@@ -273,7 +251,7 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         auto mesh = buildTerrainMesh(data.get(), updateParameters.terrainExaggeration, canonical);
         const auto vertexCount = mesh.vertexCount;
         const auto indexCount = mesh.indices.size();
-        builder->setRawVertices(std::move(mesh.vertices), vertexCount, gfx::AttributeDataType::Float4);
+        builder->setRawVertices(std::move(mesh.vertices), vertexCount, gfx::AttributeDataType::Float3);
         SegmentVector segments;
         segments.emplace_back(0, 0, vertexCount, indexCount);
         builder->setSegments(gfx::Triangles(), std::move(mesh.indices), segments.data(), segments.size());

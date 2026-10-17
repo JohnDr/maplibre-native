@@ -6,7 +6,8 @@
 namespace mln {
 namespace shaders {
 
-/// Renders the terrain surface: a 3D mesh whose vertices carry an elevation in metres and a precomputed shade.
+/// Renders the terrain surface: a 3D mesh whose vertices carry an elevation in metres and no shading (the relief
+/// comes from the draped hillshade layer, as in GL JS).
 /// The projection matrix scales z by pixels-per-metre (as for every 3D layer), so the vertex shader is the same
 /// projection the other 3D layers use.
 template <>
@@ -24,8 +25,8 @@ struct ShaderSource<BuiltIn::TerrainShader, gfx::Backend::Type::Vulkan> {
 )";
     static constexpr auto vertex = R"(
 
-// xy: tile units (0..EXTENT); z: elevation in metres; w: shade in [0, 1].
-layout(location = 0) in vec4 in_position;
+// xy: tile units (0..EXTENT); z: elevation in metres.
+layout(location = 0) in vec3 in_position;
 
 layout(push_constant) uniform Constants {
     int ubo_index;
@@ -42,9 +43,8 @@ layout(set = LAYER_SET_INDEX, binding = idTerrainFogUBO) uniform TerrainFogUBO {
     vec4 depth_range;    // x: near, y: far (fog depth range, in the projection's eye-space units)
 } fog;
 
-layout(location = 0) out float v_shade;
-layout(location = 1) out vec2 v_uv;
-layout(location = 2) out float v_fog_depth;
+layout(location = 0) out vec2 v_uv;
+layout(location = 1) out float v_fog_depth;
 
 void main() {
     gl_Position = projectTileFor3D(in_position.xy, in_position.z, projectionVector.projection_ubo[constant.ubo_index]);
@@ -54,7 +54,6 @@ void main() {
     // d the eye-space depth, which is the clip w of the main projection.
     const float eyeDepth = max(gl_Position.w, 1e-6);
     v_fog_depth = fog.depth_range.y * (eyeDepth - fog.depth_range.x) / ((fog.depth_range.y - fog.depth_range.x) * eyeDepth);
-    v_shade = in_position.w;
     // Tile-local texture coordinate (0..1) for this tile's own drape texture.
     v_uv = in_position.xy / 8192.0;
 }
@@ -62,9 +61,8 @@ void main() {
 
     static constexpr auto fragment = R"(
 
-layout(location = 0) in float v_shade;
-layout(location = 1) in vec2 v_uv;
-layout(location = 2) in float v_fog_depth;
+layout(location = 0) in vec2 v_uv;
+layout(location = 1) in float v_fog_depth;
 
 layout(set = LAYER_SET_INDEX, binding = idTerrainFogUBO) uniform TerrainFogUBO {
     vec4 fog_color;
@@ -86,14 +84,12 @@ layout(set = DRAWABLE_IMAGE_SET_INDEX, binding = 0) uniform sampler2D drapeSampl
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    // Per-tile drape: this tile's own texture, shaded by the precomputed hillshade. Where no draping layer was
-    // rendered (exactly black, e.g. before imagery loads; near-black imagery such as deep water stays as drawn) fall back to a hypsometric tint so the relief is still visible.
+    // Per-tile drape: this tile's own texture, drawn as is (GL JS draws the render-to-texture result directly). Where
+    // no draping layer was rendered (alpha 0, e.g. before imagery loads or a hillshade-only style over flat ground)
+    // fall back to a flat tint so the surface is not see-through.
     const vec4 draped = texture(drapeSampler, v_uv);
-    const float shade = clamp(v_shade, 0.0, 1.0);
-    const vec3 low = vec3(0.24, 0.42, 0.24);
-    const vec3 high = vec3(0.86, 0.83, 0.72);
-    const vec3 tint = mix(low, high, shade);
-    vec4 surface = vec4((draped.a < 0.5 ? tint : draped.rgb) * shade, 1.0);
+    const vec3 tint = vec3(0.86, 0.83, 0.72);
+    vec4 surface = vec4(draped.a < 0.5 ? tint : draped.rgb, 1.0);
 
     // GL JS terrain.fragment.glsl: blend the surface towards the fog / horizon colour with distance, in linear colour.
     const float ground_blend = fog.params.x;
