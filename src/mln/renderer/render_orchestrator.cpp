@@ -1037,7 +1037,7 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
     }
 
     if (terrainEnabled) {
-        constexpr uint32_t drapeTileSize = 512;
+        constexpr uint32_t drapeTileSize = 256;
         const auto& cover = terrainPass.getCover();
         const uint64_t fingerprint = (reinterpret_cast<uintptr_t>(updateParameters->layers.get()) * 1000003ULL) ^
                                      (reinterpret_cast<uintptr_t>(updateParameters->sources.get()) * 1000033ULL) ^
