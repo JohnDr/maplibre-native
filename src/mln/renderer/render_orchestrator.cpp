@@ -1037,7 +1037,13 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
     }
 
     if (terrainEnabled) {
-        constexpr uint32_t drapeTileSize = 256;
+        // Drape render-target size, per MapLibre GL JS (render_to_texture.ts):
+        //   rttSize = terrainTileManager.tileSize * qualityFactor
+        //   terrainTileManager.tileSize = source.tileSize * 2 (deltaZoom = 1), qualityFactor = 2
+        // i.e. rttSize = source.tileSize * 4 => 1024 for our 256-px raster sources. We use 512 (2x the
+        // source, GL JS's terrain tile size) as a first step to bound texture memory until an RTT cache
+        // like GL JS's exists, since we allocate one target per covered DEM tile with no LRU.
+        constexpr uint32_t drapeTileSize = 512;
         const auto& cover = terrainPass.getCover();
         const uint64_t fingerprint = (reinterpret_cast<uintptr_t>(updateParameters->layers.get()) * 1000003ULL) ^
                                      (reinterpret_cast<uintptr_t>(updateParameters->sources.get()) * 1000033ULL) ^
@@ -1144,12 +1150,14 @@ void RenderOrchestrator::renderTerrainDrapeTargets(const RenderTree& renderTree,
         const double s = worldSize / tileScale;
         const double tx = static_cast<double>(x) * s;
         const double ty = static_cast<double>(y) * s;
-        // Orthographic projection mapping this tile's world extent to the render target's [-1, 1] clip space.
-        // Mercator world-y grows downward, and matrix::ortho maps its `top` arg to clip +1, so pass ty+s as
-        // bottom and ty as top to keep the imagery upright.
+        // This is MapLibre GL JS's terrain RTT matrix (terrain_tile_manager.ts:
+        // `mat4.ortho(terrainRttPosMatrix32f, 0, EXTENT, EXTENT, 0, 0, 1)`) expressed in world coords: the
+        // tile-local -> world mapping is matrixFor(tileID), so mapping [tx, tx+s] x [ty, ty+s] here is
+        // algebraically the same. Mercator world-y grows downward and matrix::ortho maps `top` to clip +1, so
+        // pass ty+s as bottom and ty as top to keep the imagery upright. z: GL JS uses near/far 0/1 (tile z -> -1);
+        // on Vulkan we map z=0 to +0.5 so the per-drawable depth offset in multiplyWithProjectionMatrix
+        // (enableDepth) keeps z within [0,1] instead of clipping.
         mat4 ortho;
-        // Map z=0 to +0.5 (not the near plane) so the per-drawable depth offset applied by
-        // multiplyWithProjectionMatrix (enableDepth) keeps z within [0,1] on Vulkan instead of clipping.
         matrix::ortho(ortho, tx, tx + s, ty + s, ty, -1.5, 0.5);
         parameters.projMatrixOverride = ortho;
         parameters.drapeTargetOrdinal = drapeOrdinal++;
