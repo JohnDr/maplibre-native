@@ -8,6 +8,7 @@
 #include <mln/style/sources/vector_source.hpp>
 #include <mln/style/layer.hpp>
 #include <mln/style/layers/line_layer.hpp>
+#include <mln/style/projection.hpp>
 #include <mln/util/io.hpp>
 #include <mln/util/run_loop.hpp>
 #include <mln/util/client_options.hpp>
@@ -211,4 +212,26 @@ TEST(Style, AddRemoveRemoveImage) {
     EXPECT_TRUE(!!style.getImage("three"));
     EXPECT_FALSE(!!style.getImage("two"));
     EXPECT_FALSE(!!style.getImage("four"));
+}
+
+TEST(Style, Projection) {
+    util::RunLoop loop;
+
+    auto fileSource = std::make_shared<StubFileSource>();
+    Style::Impl style{fileSource, 1.0, {Scheduler::GetBackground(), {}}};
+
+    style.loadJSON(R"STYLE({"projection": {"type": "globe"}})STYLE");
+    ASSERT_EQ(ProjectionDefinition("globe"), style.getProjection()->getType().asConstant());
+
+    style.loadJSON(R"STYLE({})STYLE");
+    ASSERT_TRUE(style.getProjection()->getType().isUndefined());
+
+    auto projection = std::make_unique<Projection>();
+    projection->setType(ProjectionDefinition("vertical-perspective"));
+    style.setProjection(std::move(projection));
+    ASSERT_EQ(ProjectionDefinition("vertical-perspective"), style.getProjection()->getType().asConstant());
+
+    // A name that is not a projection keeps the default, with a warning.
+    style.loadJSON(R"STYLE({"projection": {"type": "orthographic"}})STYLE");
+    ASSERT_TRUE(style.getProjection()->getType().isUndefined());
 }
