@@ -168,6 +168,8 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
     layerGroup->removeDrawablesIf(
         [&](gfx::Drawable& drawable) { return drawable.getTileID() && !covered.contains(*drawable.getTileID()); });
 
+    cover = tileCover;
+
     std::unique_ptr<gfx::DrawableBuilder> builder;
     for (const auto& tileID : tileCover) {
         if (layerGroup->getDrawableCount(RenderPass::Translucent, tileID) > 0) {
@@ -190,9 +192,6 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             builder->setDepthType(gfx::DepthMaskType::ReadWrite);
             builder->setCullFaceMode(gfx::CullFaceMode::disabled());
             builder->setVertexAttrId(shaders::idTerrainPosVertexAttribute);
-            if (drapeTexture) {
-                builder->setTexture(drapeTexture, shaders::idTerrainDrapeTexture);
-            }
         }
 
         auto mesh = buildTerrainMesh(*data, updateParameters.terrainExaggeration, metersPerPixel);
@@ -242,6 +241,23 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         }
         layerGroup->mutableUniformBuffers().set(shaders::idProjectionUBO, projectionUniformBuffer);
     }
+}
+
+void TerrainPass::applyDrapeTextures(
+    const std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr>& textures) {
+    if (!layerGroup) {
+        return;
+    }
+    visitLayerGroupDrawables(*layerGroup, [&](gfx::Drawable& drawable) {
+        if (!drawable.getTileID()) {
+            return;
+        }
+        const auto c = drawable.getTileID()->canonical;
+        const auto it = textures.find({c.z, c.x, c.y});
+        if (it != textures.end() && it->second) {
+            drawable.setTexture(it->second, shaders::idTerrainDrapeTexture);
+        }
+    });
 }
 
 } // namespace mln

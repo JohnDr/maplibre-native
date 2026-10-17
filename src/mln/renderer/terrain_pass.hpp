@@ -4,12 +4,16 @@
 #include <mln/gfx/uniform_buffer.hpp>
 #include <mln/gfx/texture2d.hpp>
 #include <mln/shaders/shader_program_base.hpp>
+#include <mln/tile/tile_id.hpp>
 #include <mln/util/tileset.hpp>
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
+#include <tuple>
+#include <vector>
 
 namespace mln {
 
@@ -38,14 +42,17 @@ public:
     /// Called when a DEM tile loads, so the map can schedule another frame.
     void setTileLoadedCallback(std::function<void()> callback) { onTileLoaded = std::move(callback); }
 
-    /// The offscreen texture holding the draped map layers, sampled by the terrain shader.
-    void setDrapeTexture(gfx::Texture2DPtr texture) { drapeTexture = std::move(texture); }
+    /// The terrain tiles currently covered, in the same order as their drape textures.
+    const std::vector<OverscaledTileID>& getCover() const { return cover; }
+
+    /// Bind each terrain drawable to the draped texture of its own tile (per-tile RTT).
+    void applyDrapeTextures(const std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr>& textures);
 
 private:
     TileLayerGroupPtr layerGroup;
     gfx::ShaderProgramBasePtr shader;
     gfx::UniformBufferPtr projectionUniformBuffer;
-    gfx::Texture2DPtr drapeTexture;
+    std::vector<OverscaledTileID> cover;
     std::unique_ptr<TerrainTileManager> terrain;
     std::optional<Tileset> tileset;
     std::function<void()> onTileLoaded;

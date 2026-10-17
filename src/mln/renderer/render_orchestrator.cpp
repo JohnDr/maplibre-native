@@ -5,6 +5,11 @@
 #include <mln/renderer/change_request.hpp>
 #include <mln/renderer/renderer_observer.hpp>
 #include <mln/renderer/render_target.hpp>
+#include <mln/map/transform_state.hpp>
+#include <mln/gfx/upload_pass.hpp>
+#include <mln/util/projection.hpp>
+#include <mln/util/mat4.hpp>
+#include <set>
 #include <mln/renderer/render_source.hpp>
 #include <mln/renderer/render_layer.hpp>
 #include <mln/renderer/render_static_data.hpp>
@@ -1008,36 +1013,44 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
 
     globeDepthPass.update(shaders, context, state, *updateParameters, has3D);
 
-    // Terrain drape: render the map layers into an offscreen texture that the terrain samples.
+    terrainPass.update(shaders, context, state, paintParameters, *updateParameters);
+
+    // Terrain drape: one tile-sized offscreen target per terrain tile, holding the draped map layers.
     const bool terrainEnabled = updateParameters->terrainTileset.has_value() &&
                                 !updateParameters->terrainTileset->tiles.empty();
     if (terrainEnabled) {
-        const Size drapeSize = paintParameters.renderableSize;
-        if (!terrainDrapeTarget || terrainDrapeTargetSize != drapeSize) {
-            if (terrainDrapeTarget) {
-                removeRenderTarget(terrainDrapeTarget);
+        constexpr uint32_t drapeTileSize = 512;
+        const auto& cover = terrainPass.getCover();
+        std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr> drapeTextures;
+        std::set<std::tuple<uint8_t, uint32_t, uint32_t>> live;
+        for (const auto& tileID : cover) {
+            const auto c = tileID.canonical;
+            const auto key = std::make_tuple(c.z, c.x, c.y);
+            live.insert(key);
+            auto it = terrainDrapeTargets.find(key);
+            if (it == terrainDrapeTargets.end()) {
+                auto rt = context.createRenderTarget({drapeTileSize, drapeTileSize},
+                                                     gfx::TextureChannelDataType::UnsignedByte);
+                if (!rt) {
+                    continue;
+                }
+                it = terrainDrapeTargets.emplace(key, rt).first;
             }
-            terrainDrapeTarget = context.createRenderTarget(drapeSize, gfx::TextureChannelDataType::UnsignedByte);
-            terrainDrapeTargetSize = drapeSize;
-            if (terrainDrapeTarget) {
-                addRenderTarget(terrainDrapeTarget);
-            }
-        }
-        if (terrainDrapeTarget) {
             for (auto& [index, layerGroup] : layerGroupsByLayerIndex) {
                 if (layerGroup) {
-                    terrainDrapeTarget->addLayerGroup(layerGroup, /*replace=*/true);
+                    it->second->addLayerGroup(layerGroup, /*replace=*/true);
                 }
             }
-            terrainPass.setDrapeTexture(terrainDrapeTarget->getTexture());
+            drapeTextures[key] = it->second->getTexture();
         }
-    } else if (terrainDrapeTarget) {
-        removeRenderTarget(terrainDrapeTarget);
-        terrainDrapeTarget.reset();
-        terrainPass.setDrapeTexture(nullptr);
+        for (auto it = terrainDrapeTargets.begin(); it != terrainDrapeTargets.end();) {
+            it = live.contains(it->first) ? std::next(it) : terrainDrapeTargets.erase(it);
+        }
+        terrainPass.applyDrapeTextures(drapeTextures);
+    } else if (!terrainDrapeTargets.empty()) {
+        terrainDrapeTargets.clear();
+        terrainPass.applyDrapeTextures({});
     }
-
-    terrainPass.update(shaders, context, state, paintParameters, *updateParameters);
 }
 
 void RenderOrchestrator::processChanges() {
@@ -1065,6 +1078,39 @@ bool RenderOrchestrator::removeRenderTarget(const RenderTargetPtr& renderTarget)
     } else {
         return false;
     }
+}
+
+void RenderOrchestrator::uploadTerrainDrapeTargets(gfx::UploadPass& uploadPass) {
+    for (auto& [key, renderTarget] : terrainDrapeTargets) {
+        if (renderTarget) {
+            renderTarget->upload(uploadPass);
+        }
+    }
+}
+
+void RenderOrchestrator::renderTerrainDrapeTargets(const RenderTree& renderTree, PaintParameters& parameters) {
+    if (terrainDrapeTargets.empty()) {
+        return;
+    }
+    const TransformState& state = parameters.transformParams.state;
+    const double worldSize = Projection::worldSize(state.getScale());
+
+    for (auto& [key, renderTarget] : terrainDrapeTargets) {
+        if (!renderTarget) {
+            continue;
+        }
+        const auto [z, x, y] = key;
+        const double tileScale = static_cast<double>(1ull << z);
+        const double s = worldSize / tileScale;
+        const double tx = static_cast<double>(x) * s;
+        const double ty = static_cast<double>(y) * s;
+        // Orthographic projection mapping this tile's world extent to the render target's [-1, 1] clip space.
+        mat4 ortho;
+        matrix::ortho(ortho, tx, tx + s, ty, ty + s, -1.0, 1.0);
+        parameters.projMatrixOverride = ortho;
+        renderTarget->render(*this, renderTree, parameters);
+    }
+    parameters.projMatrixOverride.reset();
 }
 
 void RenderOrchestrator::updateDebugLayerGroups(const RenderTree& renderTree, PaintParameters& parameters) {

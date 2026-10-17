@@ -20,6 +20,7 @@
 
 #include <map>
 #include <memory>
+#include <tuple>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -42,6 +43,7 @@ class RenderTree;
 namespace gfx {
 class ShaderRegistry;
 class Drawable;
+class UploadPass;
 using DrawablePtr = std::shared_ptr<Drawable>;
 class DynamicTextureAtlas;
 using DynamicTextureAtlasPtr = std::shared_ptr<gfx::DynamicTextureAtlas>;
@@ -161,6 +163,10 @@ public:
 
     void updateDebugLayerGroups(const RenderTree& renderTree, PaintParameters& parameters);
 
+    // Terrain drape: per-tile render targets holding the draped map layers, rendered with a per-tile projection.
+    void uploadTerrainDrapeTargets(gfx::UploadPass&);
+    void renderTerrainDrapeTargets(const RenderTree&, PaintParameters&);
+
     template <typename Func /* void(LayerGroupBase&) */>
     void visitDebugLayerGroups(Func f) {
         for (auto& pair : debugLayerGroups) {
@@ -252,9 +258,9 @@ private:
 
     std::vector<RenderTargetPtr> renderTargets;
 
-    // Offscreen target holding the map layers draped over the terrain.
-    RenderTargetPtr terrainDrapeTarget;
-    Size terrainDrapeTargetSize;
+    // Per-tile offscreen targets holding the map layers draped over the terrain, keyed by tile (z, x, y).
+    std::map<std::tuple<uint8_t, uint32_t, uint32_t>, RenderTargetPtr> terrainDrapeTargets;
+    std::uint8_t terrainDrapeZoom = 0;
     RenderItem::DebugLayerGroupMap debugLayerGroups;
     GlobeDepthPass globeDepthPass;
     TerrainPass terrainPass;

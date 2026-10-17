@@ -113,9 +113,11 @@ void LayerTweaker::multiplyWithProjectionMatrix(/*in-out*/ mat4& matrix,
                                                 bool nearClipped,
                                                 bool aligned) {
     // nearClippedMatrix has near plane moved further, to enhance depth buffer precision
-    const auto& projMatrixRef = aligned ? parameters.transformParams.alignedProjMatrix
-                                        : (nearClipped ? parameters.transformParams.nearClippedProjMatrix
-                                                       : parameters.transformParams.projMatrix);
+    const auto& projMatrixRef = parameters.projMatrixOverride
+                                    ? *parameters.projMatrixOverride
+                                    : (aligned ? parameters.transformParams.alignedProjMatrix
+                                               : (nearClipped ? parameters.transformParams.nearClippedProjMatrix
+                                                              : parameters.transformParams.projMatrix));
 #if !MLN_RENDER_BACKEND_OPENGL
     // If this drawable is participating in depth testing, offset the
     // projection matrix NDC depth range for the drawable's layer and sublayer.

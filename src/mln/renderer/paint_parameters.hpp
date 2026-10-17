@@ -3,6 +3,8 @@
 #include <mln/renderer/render_pass.hpp>
 #include <mln/renderer/render_light.hpp>
 #include <mln/renderer/render_source.hpp>
+#include <mln/util/mat4.hpp>
+#include <optional>
 #include <mln/map/mode.hpp>
 #include <mln/map/transform_state.hpp>
 #include <mln/gfx/depth_mode.hpp>
@@ -75,6 +77,10 @@ public:
     const TransformParameters& transformParams;
     const TransformState& state;
     const EvaluatedLight& evaluatedLight;
+
+    // When set, overrides the camera projection for this render pass. Used to render layer groups into a per-tile
+    // terrain drape target with a per-tile orthographic projection.
+    std::optional<mat4> projMatrixOverride;
 
     RenderStaticData& staticData;
     LineAtlas& lineAtlas;

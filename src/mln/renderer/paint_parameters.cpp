@@ -116,6 +116,9 @@ mat4 PaintParameters::matrixForTile(const UnwrappedTileID& tileID, bool aligned)
 }
 
 ProjectionData PaintParameters::projectionDataForTile(const UnwrappedTileID& tileID, bool aligned) const {
+    if (projMatrixOverride) {
+        return state.getProjectionData(tileID, *projMatrixOverride);
+    }
     return state.getProjectionData(tileID, aligned ? transformParams.alignedProjMatrix : transformParams.projMatrix);
 }
 

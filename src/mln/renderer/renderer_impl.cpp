@@ -296,6 +296,7 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
         if (auto* terrain = orchestrator.getTerrainLayerGroup()) {
             terrain->upload(*uploadPass);
         }
+        orchestrator.uploadTerrainDrapeTargets(*uploadPass);
 
         // Give the render targets a chance to upload
         orchestrator.visitRenderTargets([&](RenderTarget& renderTarget) { renderTarget.upload(*uploadPass); });
@@ -361,6 +362,8 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
         // draw render targets
         orchestrator.visitRenderTargets(
             [&](RenderTarget& renderTarget) { renderTarget.render(orchestrator, renderTree, parameters); });
+        // draw the terrain drape targets (per-tile, with a per-tile projection)
+        orchestrator.renderTerrainDrapeTargets(renderTree, parameters);
     };
 
     const auto commonClearPass = [&] {

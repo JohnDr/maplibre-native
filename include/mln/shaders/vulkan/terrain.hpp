@@ -39,7 +39,8 @@ void main() {
     gl_Position = projectTileFor3D(in_position.xy, in_position.z, projectionVector.projection_ubo[constant.ubo_index]);
     applySurfaceTransform();
     v_shade = in_position.w;
-    v_uv = gl_Position.xy / gl_Position.w * 0.5 + 0.5;
+    // Tile-local texture coordinate (0..1) for this tile's own drape texture.
+    v_uv = in_position.xy / 8192.0;
 }
 )";
 
@@ -53,8 +54,7 @@ layout(set = DRAWABLE_IMAGE_SET_INDEX, binding = 0) uniform sampler2D drapeSampl
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    // Screen-space drape: the map is rendered to an offscreen texture and sampled at this fragment's screen position,
-    // then shaded by the precomputed hillshade.
+    // Per-tile drape: this tile's own texture, shaded by the precomputed hillshade.
     const vec4 draped = texture(drapeSampler, vec2(v_uv.x, 1.0 - v_uv.y));
     out_color = vec4(draped.rgb * clamp(v_shade, 0.0, 1.0), 1.0);
 }
