@@ -5,6 +5,7 @@
 #include <mln/style/layers/hillshade_layer_impl.hpp>
 #include <mln/style/layers/hillshade_layer_properties.hpp>
 #include <mln/tile/tile_id.hpp>
+#include <mln/gfx/projection_variant.hpp>
 
 namespace mln {
 
@@ -55,6 +56,7 @@ private:
 
     gfx::ShaderProgramBasePtr hillshadePrepareShader;
     gfx::ShaderProgramBasePtr hillshadeShader;
+    gfx::ProjectionVariant projectionVariant = gfx::ProjectionVariant::Mercator;
     std::vector<RenderTargetPtr> activatedRenderTargets;
 
     using HillshadeVertexVector = gfx::VertexVector<HillshadeLayoutVertex>;

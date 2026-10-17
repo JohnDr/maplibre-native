@@ -11,6 +11,9 @@
 #include <mln/style/layers/raster_layer_impl.hpp>
 #include <mln/util/logging.hpp>
 
+#include <optional>
+
+#include <mln/renderer/globe_tile_mesh.hpp>
 #include <mln/renderer/layers/raster_layer_tweaker.hpp>
 #include <mln/gfx/image_drawable_data.hpp>
 #include <mln/gfx/drawable_impl.hpp>
@@ -100,7 +103,7 @@ void RenderRasterLayer::layerIndexChanged(int32_t newLayerIndex, UniqueChangeReq
 
 void RenderRasterLayer::update(gfx::ShaderRegistry& shaders,
                                gfx::Context& context,
-                               const TransformState& /*state*/,
+                               const TransformState& state,
                                const std::shared_ptr<UpdateParameters>&,
                                [[maybe_unused]] const PaintParameters& paintParameters,
                                [[maybe_unused]] const RenderTree& renderTree,
@@ -117,8 +120,11 @@ void RenderRasterLayer::update(gfx::ShaderRegistry& shaders,
 
     constexpr auto renderPass = RenderPass::Translucent;
 
-    if (!rasterShader) {
-        rasterShader = context.getGenericShader(shaders, "RasterShader");
+    const gfx::ProjectionVariant variant =
+        state.isGlobeRendering() ? gfx::ProjectionVariant::Globe : gfx::ProjectionVariant::Mercator;
+    if (!rasterShader || projectionVariant != variant) {
+        projectionVariant = variant;
+        rasterShader = context.getGenericShader(shaders, "RasterShader", projectionVariant);
         if (!rasterShader) {
             return;
         }
@@ -185,7 +191,8 @@ void RenderRasterLayer::update(gfx::ShaderRegistry& shaders,
     // Populates a drawable xor a drawable builder for creates and updates, respectively.
     // Returns false if the drawable must be re-created.
     const auto buildVertexData =
-        [&](const gfx::UniqueDrawableBuilder& builder, gfx::Drawable* drawable, const RasterBucket& bucket) {
+        [&](const gfx::UniqueDrawableBuilder& builder, gfx::Drawable* drawable, const RasterBucket& bucket,
+            const OverscaledTileID* tileID) {
             // The bucket may later add, remove, or change masking.  In that case, the tile's
             // shared data and segments are not updated, and it needs to be re-created.
             if (drawable && bucket.sharedVertices->isModifiedAfter(drawable->createTime)) {
@@ -194,14 +201,19 @@ void RenderRasterLayer::update(gfx::ShaderRegistry& shaders,
 
             // The bucket only fills in geometry for masked tiles,
             // otherwise the standard tile extent geometry should be used.
-            const bool shared = (!bucket.sharedVertices->empty() && !bucket.sharedTriangles->empty() &&
-                                 !bucket.segments.empty());
-            const auto& vertices = shared ? bucket.sharedVertices : staticDataVertices;
-            const auto& indices = shared ? bucket.sharedTriangles : staticDataIndices;
-            const auto* segments = shared ? &bucket.segments : staticDataSegments.get();
+            const bool globe = projectionVariant == gfx::ProjectionVariant::Globe && tileID;
+            const bool shared = !globe && !bucket.sharedVertices->empty() && !bucket.sharedTriangles->empty() &&
+                                !bucket.segments.empty();
+            std::optional<GlobeTileMesh<RasterLayoutVertex, decltype(&RasterBucket::layoutVertex)>> globeMesh;
+            if (globe) {
+                globeMesh.emplace(tileID->canonical, &RasterBucket::layoutVertex);
+            }
+            const auto& vertices = globe ? globeMesh->vertices : shared ? bucket.sharedVertices : staticDataVertices;
+            const auto& indices = globe ? globeMesh->indices : shared ? bucket.sharedTriangles : staticDataIndices;
+            const auto* segments = globe ? &globeMesh->segments : shared ? &bucket.segments : staticDataSegments.get();
 
             gfx::VertexAttributeArrayPtr bucketAttrs;
-            auto& vertexAttrs = shared ? bucketAttrs : staticAttrs;
+            auto& vertexAttrs = (shared || globe) ? bucketAttrs : staticAttrs;
             if (!vertexAttrs) {
                 vertexAttrs = context.createVertexAttributeArray();
 
@@ -254,7 +266,7 @@ void RenderRasterLayer::update(gfx::ShaderRegistry& shaders,
             // TODO: Share textures
             builder = createBuilder();
             for (const auto& matrix_ : imageData->matrices) {
-                buildVertexData(builder, /*drawable=*/nullptr, bucket);
+                buildVertexData(builder, /*drawable=*/nullptr, bucket, nullptr);
                 setTextures(builder, bucket);
 
                 // finish
@@ -328,7 +340,7 @@ void RenderRasterLayer::update(gfx::ShaderRegistry& shaders,
                     }
 
                     gfx::UniqueDrawableBuilder none;
-                    if (!geometryChanged && !buildVertexData(none, &drawable, bucket)) {
+                    if (!geometryChanged && !buildVertexData(none, &drawable, bucket, &tileID)) {
                         // Masking changed, need to rebuild this tile
                         geometryChanged = true;
                     }
@@ -353,7 +365,7 @@ void RenderRasterLayer::update(gfx::ShaderRegistry& shaders,
                 setTextures(builder, bucket);
             };
 
-            buildVertexData(builder, /*drawable=*/nullptr, bucket);
+            buildVertexData(builder, /*drawable=*/nullptr, bucket, &tileID);
 
             // finish
             builder->flush(context);

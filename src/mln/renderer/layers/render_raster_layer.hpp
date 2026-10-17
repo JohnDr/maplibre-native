@@ -5,6 +5,7 @@
 #include <mln/style/layers/raster_layer_impl.hpp>
 #include <mln/style/layers/raster_layer_properties.hpp>
 #include <mln/gfx/context.hpp>
+#include <mln/gfx/projection_variant.hpp>
 
 namespace mln {
 
@@ -50,6 +51,8 @@ private:
     // Paint properties
     style::RasterPaintProperties::Unevaluated unevaluated;
     const ImageSourceRenderData* imageData = nullptr;
+
+    gfx::ProjectionVariant projectionVariant = gfx::ProjectionVariant::Mercator;
 
     gfx::ShaderProgramBasePtr rasterShader;
     LayerGroupPtr imageLayerGroup;

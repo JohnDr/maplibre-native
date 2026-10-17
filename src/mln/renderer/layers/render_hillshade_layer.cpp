@@ -12,6 +12,9 @@
 #include <mln/math/angles.hpp>
 #include <mln/util/geo.hpp>
 
+#include <optional>
+
+#include <mln/renderer/globe_tile_mesh.hpp>
 #include <mln/renderer/layers/hillshade_layer_tweaker.hpp>
 #include <mln/renderer/layers/hillshade_prepare_layer_tweaker.hpp>
 #include <mln/renderer/layer_group.hpp>
@@ -183,8 +186,11 @@ void RenderHillshadeLayer::update(gfx::ShaderRegistry& shaders,
         hillshadePrepareShader = context.getGenericShader(shaders, HillshadePrepareShaderGroupName);
     }
 
-    if (!hillshadeShader) {
-        hillshadeShader = context.getGenericShader(shaders, HillshadeShaderGroupName);
+    const gfx::ProjectionVariant variant =
+        state.isGlobeRendering() ? gfx::ProjectionVariant::Globe : gfx::ProjectionVariant::Mercator;
+    if (!hillshadeShader || projectionVariant != variant) {
+        projectionVariant = variant;
+        hillshadeShader = context.getGenericShader(shaders, HillshadeShaderGroupName, projectionVariant);
     }
 
     if (!hillshadePrepareShader || !hillshadeShader) {
@@ -310,7 +316,13 @@ void RenderHillshadeLayer::update(gfx::ShaderRegistry& shaders,
         std::shared_ptr<gfx::IndexVector<gfx::Triangles>> indices;
         auto* segments = &staticDataSegments;
 
-        if (!bucket.vertices.empty() && !bucket.indices.empty() && !bucket.segments.empty()) {
+        std::optional<GlobeTileMesh<HillshadeLayoutVertex, decltype(&HillshadeBucket::layoutVertex)>> globeMesh;
+        if (projectionVariant == gfx::ProjectionVariant::Globe) {
+            globeMesh.emplace(tileID.canonical, &HillshadeBucket::layoutVertex);
+            vertices = globeMesh->vertices;
+            indices = globeMesh->indices;
+            segments = &globeMesh->segments;
+        } else if (!bucket.vertices.empty() && !bucket.indices.empty() && !bucket.segments.empty()) {
             vertices = bucket.sharedVertices;
             indices = bucket.sharedIndices;
             segments = &bucket.segments;

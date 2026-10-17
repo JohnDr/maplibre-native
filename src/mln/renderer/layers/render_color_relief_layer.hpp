@@ -5,6 +5,7 @@
 #include <mln/style/layers/color_relief_layer_impl.hpp>
 #include <mln/style/layers/color_relief_layer_properties.hpp>
 #include <mln/util/image.hpp>
+#include <mln/gfx/projection_variant.hpp>
 #include <memory>
 #include <vector> // Added for std::vector<float>
 
@@ -64,6 +65,7 @@ private:
 
     // Shader
     gfx::ShaderProgramBasePtr colorReliefShader;
+    gfx::ProjectionVariant projectionVariant = gfx::ProjectionVariant::Mercator;
 
     // Vertex data
     using ColorReliefVertexVector = gfx::VertexVector<HillshadeLayoutVertex>;

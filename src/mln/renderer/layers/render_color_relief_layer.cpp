@@ -5,6 +5,9 @@
 #include <mln/renderer/sources/render_raster_dem_source.hpp>
 #include <mln/renderer/paint_parameters.hpp>
 #include <mln/renderer/render_static_data.hpp>
+#include <mln/renderer/globe_tile_mesh.hpp>
+
+#include <optional>
 #include <mln/style/layers/color_relief_layer.hpp>
 #include <mln/style/layers/color_relief_layer_impl.hpp>
 #include <mln/gfx/cull_face_mode.hpp>
@@ -195,7 +198,7 @@ static const std::string ColorReliefShaderGroupName = "ColorReliefShader";
 
 void RenderColorReliefLayer::update(gfx::ShaderRegistry& shaders,
                                     gfx::Context& context,
-                                    const TransformState&,
+                                    const TransformState& state,
                                     const std::shared_ptr<UpdateParameters>&,
                                     const PaintParameters&,
                                     const RenderTree&,
@@ -221,8 +224,11 @@ void RenderColorReliefLayer::update(gfx::ShaderRegistry& shaders,
         layerGroup->addLayerTweaker(layerTweaker);
     }
 
-    if (!colorReliefShader) {
-        colorReliefShader = context.getGenericShader(shaders, ColorReliefShaderGroupName);
+    const gfx::ProjectionVariant variant =
+        state.isGlobeRendering() ? gfx::ProjectionVariant::Globe : gfx::ProjectionVariant::Mercator;
+    if (!colorReliefShader || projectionVariant != variant) {
+        projectionVariant = variant;
+        colorReliefShader = context.getGenericShader(shaders, ColorReliefShaderGroupName, projectionVariant);
     }
 
     if (!colorReliefShader) {
@@ -299,7 +305,13 @@ void RenderColorReliefLayer::update(gfx::ShaderRegistry& shaders,
         std::shared_ptr<gfx::IndexVector<gfx::Triangles>> indices;
         auto* segments = &staticDataSegments;
 
-        if (!bucket.vertices.empty() && !bucket.indices.empty() && !bucket.segments.empty()) {
+        std::optional<GlobeTileMesh<HillshadeLayoutVertex, decltype(&HillshadeBucket::layoutVertex)>> globeMesh;
+        if (projectionVariant == gfx::ProjectionVariant::Globe) {
+            globeMesh.emplace(tileID.canonical, &HillshadeBucket::layoutVertex);
+            vertices = globeMesh->vertices;
+            indices = globeMesh->indices;
+            segments = &globeMesh->segments;
+        } else if (!bucket.vertices.empty() && !bucket.indices.empty() && !bucket.segments.empty()) {
             vertices = bucket.sharedVertices;
             indices = bucket.sharedIndices;
             segments = &bucket.segments;
