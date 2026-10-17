@@ -138,6 +138,7 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
     if (!tileset || *tileset != *updateParameters.terrainTileset) {
         tileset = updateParameters.terrainTileset;
         terrain = std::make_unique<TerrainTileManager>(updateParameters.fileSource.get(), *tileset);
+        terrain->setOnTileLoaded(onTileLoaded);
         if (layerGroup) {
             layerGroup->clearDrawables();
         }

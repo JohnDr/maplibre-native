@@ -5,6 +5,7 @@
 #include <mln/util/tileset.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -31,11 +32,15 @@ public:
     /// The layer group holding the terrain drawables, or null before the first enable.
     LayerGroupBase* getLayerGroup() const { return layerGroup.get(); }
 
+    /// Called when a DEM tile loads, so the map can schedule another frame.
+    void setTileLoadedCallback(std::function<void()> callback) { onTileLoaded = std::move(callback); }
+
 private:
     TileLayerGroupPtr layerGroup;
     gfx::ShaderProgramBasePtr shader;
     std::unique_ptr<TerrainTileManager> terrain;
     std::optional<Tileset> tileset;
+    std::function<void()> onTileLoaded;
     uint8_t demZoom = 0;
     double builtZoom = -1;
     double builtExaggeration = -1;

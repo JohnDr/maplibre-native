@@ -128,6 +128,12 @@ RenderOrchestrator::RenderOrchestrator(bool backgroundLayerAsColor_,
       threadPool(threadPool_) {
     glyphManager->setObserver(this);
     imageManager->setObserver(this);
+    // When a terrain DEM tile loads, schedule another frame so the terrain is rebuilt with the new data.
+    terrainPass.setTileLoadedCallback([this] {
+        if (observer != nullptr) {
+            observer->onInvalidate();
+        }
+    });
 }
 
 RenderOrchestrator::~RenderOrchestrator() {

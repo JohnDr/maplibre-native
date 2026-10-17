@@ -129,6 +129,9 @@ void TerrainTileManager::onTileResponse(const CanonicalTileID& id,
     try {
         PremultipliedImage image = decodeImage(*res.data);
         it->second.data = std::make_shared<DEMData>(image, encoding);
+        if (onTileLoaded) {
+            onTileLoaded();
+        }
     } catch (const std::exception&) {
         // A malformed DEM tile simply leaves the terrain flat there.
     }

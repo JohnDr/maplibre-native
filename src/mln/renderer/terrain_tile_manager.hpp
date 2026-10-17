@@ -5,6 +5,7 @@
 #include <mln/util/tileset.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -39,6 +40,9 @@ public:
     /// The DEM data for a tile, requesting it when necessary. Null until it has loaded.
     std::shared_ptr<DEMData> getTileData(const CanonicalTileID& id) { return getDEMData(id); }
 
+    /// Called when a tile finishes loading, so the map can schedule a repaint.
+    void setOnTileLoaded(std::function<void()> callback) { onTileLoaded = std::move(callback); }
+
 protected:
     /// The DEM data for a tile, requesting it when necessary. Overridable so tests can inject data.
     virtual std::shared_ptr<DEMData> getDEMData(const CanonicalTileID&);
@@ -54,6 +58,7 @@ private:
 
     FileSource* fileSource;
     Tileset tileset;
+    std::function<void()> onTileLoaded;
     std::map<std::tuple<uint8_t, uint32_t, uint32_t>, Entry> tiles;
 };
 
