@@ -161,6 +161,7 @@ void HillshadeLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintParam
 
 #if MLN_UBO_CONSOLIDATION
     int i = 0;
+    const auto drapeWindow = drapeUBOWindow(parameters, layerGroup.getDrawableCount());
     std::vector<HillshadeDrawableUBO> drawableUBOVector(layerGroup.getDrawableCount());
     std::vector<HillshadeTilePropsUBO> tilePropsUBOVector(layerGroup.getDrawableCount());
     std::vector<ProjectionUBO> projectionUBOVector(layerGroup.getDrawableCount());
@@ -206,7 +207,7 @@ void HillshadeLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintParam
         };
 
 #if MLN_UBO_CONSOLIDATION
-        drawable.setUBOIndex(i++);
+        drawable.setUBOIndex(static_cast<int32_t>(drapeWindow.base + static_cast<std::uint32_t>(i++)));
 #else
         auto& drawableUniforms = drawable.mutableUniformBuffers();
         drawableUniforms.createOrUpdate(idHillshadeDrawableUBO, &drawableUBO, parameters.context);
@@ -216,25 +217,14 @@ void HillshadeLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintParam
 
 #if MLN_UBO_CONSOLIDATION
     auto& context = parameters.context;
-    const size_t drawableUBOVectorSize = sizeof(HillshadeDrawableUBO) * drawableUBOVector.size();
-    if (!drawableUniformBuffer || drawableUniformBuffer->getSize() < drawableUBOVectorSize) {
-        drawableUniformBuffer = context.createUniformBuffer(
-            drawableUBOVector.data(), drawableUBOVectorSize, false, true);
-    } else {
-        drawableUniformBuffer->update(drawableUBOVector.data(), drawableUBOVectorSize);
-    }
-
-    const size_t tilePropsUBOVectorSize = sizeof(HillshadeTilePropsUBO) * tilePropsUBOVector.size();
-    if (!tilePropsUniformBuffer || tilePropsUniformBuffer->getSize() < tilePropsUBOVectorSize) {
-        tilePropsUniformBuffer = context.createUniformBuffer(
-            tilePropsUBOVector.data(), tilePropsUBOVectorSize, false, true);
-    } else {
-        tilePropsUniformBuffer->update(tilePropsUBOVector.data(), tilePropsUBOVectorSize);
-    }
+    updateWindowedBuffer(
+        drawableUniformBuffer, context, drawableUBOVector.data(), sizeof(HillshadeDrawableUBO), drawableUBOVector.size(), drapeWindow);
+    updateWindowedBuffer(
+        tilePropsUniformBuffer, context, tilePropsUBOVector.data(), sizeof(HillshadeTilePropsUBO), tilePropsUBOVector.size(), drapeWindow);
 
     layerUniforms.set(idHillshadeDrawableUBO, drawableUniformBuffer);
     layerUniforms.set(idHillshadeTilePropsUBO, tilePropsUniformBuffer);
-    uploadProjectionUBOs(layerUniforms, projectionUBOVector, context);
+    uploadProjectionUBOs(layerUniforms, projectionUBOVector, context, drapeWindow.base, drapeWindow.total);
 #endif
 }
 

@@ -71,6 +71,7 @@ void BackgroundLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintPara
 
 #if MLN_UBO_CONSOLIDATION
     int i = 0;
+    const auto drapeWindow = drapeUBOWindow(parameters, layerGroup.getDrawableCount());
     std::vector<BackgroundDrawableUnionUBO> drawableUBOVector(layerGroup.getDrawableCount());
     std::vector<ProjectionUBO> projectionUBOVector(layerGroup.getDrawableCount());
 #endif
@@ -142,21 +143,15 @@ void BackgroundLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintPara
         }
 
 #if MLN_UBO_CONSOLIDATION
-        drawable.setUBOIndex(i++);
+        drawable.setUBOIndex(static_cast<int32_t>(drapeWindow.base + static_cast<std::uint32_t>(i++)));
 #endif
     });
 
 #if MLN_UBO_CONSOLIDATION
-    const size_t drawableUBOVectorSize = sizeof(BackgroundDrawableUnionUBO) * drawableUBOVector.size();
-    if (!drawableUniformBuffer || drawableUniformBuffer->getSize() < drawableUBOVectorSize) {
-        drawableUniformBuffer = context.createUniformBuffer(
-            drawableUBOVector.data(), drawableUBOVectorSize, false, true);
-    } else {
-        drawableUniformBuffer->update(drawableUBOVector.data(), drawableUBOVectorSize);
-    }
+    updateWindowedBuffer(drawableUniformBuffer, context, drawableUBOVector.data(), sizeof(BackgroundDrawableUnionUBO), drawableUBOVector.size(), drapeWindow);
 
     layerUniforms.set(idBackgroundDrawableUBO, drawableUniformBuffer);
-    uploadProjectionUBOs(layerUniforms, projectionUBOVector, context);
+    uploadProjectionUBOs(layerUniforms, projectionUBOVector, context, drapeWindow.base, drapeWindow.total);
 #endif
 }
 

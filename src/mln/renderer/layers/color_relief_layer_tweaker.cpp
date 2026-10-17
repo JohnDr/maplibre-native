@@ -36,6 +36,7 @@ void ColorReliefLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintPar
 
 #if MLN_UBO_CONSOLIDATION
     int i = 0;
+    const auto drapeWindow = drapeUBOWindow(parameters, layerGroup.getDrawableCount());
     std::vector<ColorReliefDrawableUBO> drawableUBOVector(layerGroup.getDrawableCount());
     std::vector<ColorReliefTilePropsUBO> tilePropsUBOVector(layerGroup.getDrawableCount());
     std::vector<ProjectionUBO> projectionUBOVector(layerGroup.getDrawableCount());
@@ -60,7 +61,7 @@ void ColorReliefLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintPar
             }
         }
 
-        drawable.setUBOIndex(i++);
+        drawable.setUBOIndex(static_cast<int32_t>(drapeWindow.base + static_cast<std::uint32_t>(i++)));
 #else
         ColorReliefDrawableUBO drawableUBO;
         drawableUBO.matrix = util::cast<float>(projection.mainMatrix);
@@ -74,25 +75,13 @@ void ColorReliefLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintPar
     });
 
 #if MLN_UBO_CONSOLIDATION
-    const size_t drawableUBOVectorSize = sizeof(ColorReliefDrawableUBO) * drawableUBOVector.size();
-    if (!drawableUniformBuffer || drawableUniformBuffer->getSize() < drawableUBOVectorSize) {
-        drawableUniformBuffer = context.createUniformBuffer(
-            drawableUBOVector.data(), drawableUBOVectorSize, false, true);
-    } else {
-        drawableUniformBuffer->update(drawableUBOVector.data(), drawableUBOVectorSize);
-    }
+    updateWindowedBuffer(drawableUniformBuffer, context, drawableUBOVector.data(), sizeof(ColorReliefDrawableUBO), drawableUBOVector.size(), drapeWindow);
 
-    const size_t tilePropsUBOVectorSize = sizeof(ColorReliefTilePropsUBO) * tilePropsUBOVector.size();
-    if (!tilePropsUniformBuffer || tilePropsUniformBuffer->getSize() < tilePropsUBOVectorSize) {
-        tilePropsUniformBuffer = context.createUniformBuffer(
-            tilePropsUBOVector.data(), tilePropsUBOVectorSize, false, true);
-    } else {
-        tilePropsUniformBuffer->update(tilePropsUBOVector.data(), tilePropsUBOVectorSize);
-    }
+    updateWindowedBuffer(tilePropsUniformBuffer, context, tilePropsUBOVector.data(), sizeof(ColorReliefTilePropsUBO), tilePropsUBOVector.size(), drapeWindow);
 
     layerUniforms.set(idColorReliefDrawableUBO, drawableUniformBuffer);
     layerUniforms.set(idColorReliefTilePropsUBO, tilePropsUniformBuffer);
-    uploadProjectionUBOs(layerUniforms, projectionUBOVector, context);
+    uploadProjectionUBOs(layerUniforms, projectionUBOVector, context, drapeWindow.base, drapeWindow.total);
 #endif
 }
 

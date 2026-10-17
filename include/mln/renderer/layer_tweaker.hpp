@@ -89,6 +89,25 @@ protected:
                               std::uint32_t baseElement = 0,
                               std::uint32_t totalElements = 0);
     gfx::UniformBufferPtr projectionUniformBuffer;
+
+    /// Block layout of a layer's consolidated UBO arrays when it is drawn into terrain drape targets. All drape
+    /// targets are recorded into one command buffer and each has its own projection, so every target needs its own
+    /// block of `drawableCount` elements, selected per draw through `uboIndex`. Block 0 is the normal (non-drape)
+    /// pass, drape target `ordinal` uses block `ordinal + 1`. Without draping `base` is 0 and `total` is
+    /// `drawableCount`.
+    struct DrapeUBOWindow {
+        std::uint32_t base = 0;
+        std::uint32_t total = 0;
+    };
+    static DrapeUBOWindow drapeUBOWindow(const PaintParameters&, std::size_t drawableCount);
+
+    /// Write `count` elements of `elementSize` bytes at the window's block, sizing the buffer for all blocks.
+    static void updateWindowedBuffer(gfx::UniformBufferPtr&,
+                                     gfx::Context&,
+                                     const void* data,
+                                     std::size_t elementSize,
+                                     std::size_t count,
+                                     const DrapeUBOWindow&);
 #endif
 
     /// Multiplies with the projection matrix (either default, near clipped or aligned) for the given drawable

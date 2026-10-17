@@ -113,6 +113,32 @@ void LayerTweaker::uploadProjectionUBOs(gfx::UniformBufferArray& layerUniforms,
 }
 #endif
 
+#if MLN_UBO_CONSOLIDATION
+LayerTweaker::DrapeUBOWindow LayerTweaker::drapeUBOWindow(const PaintParameters& parameters,
+                                                          std::size_t drawableCount) {
+    const auto dc = static_cast<std::uint32_t>(drawableCount);
+    DrapeUBOWindow window;
+    window.base = parameters.drapeTargetOrdinal >= 0 ? (static_cast<std::uint32_t>(parameters.drapeTargetOrdinal) + 1u) * dc
+                                                     : 0u;
+    window.total = parameters.drapeTargetCount > 0 ? (parameters.drapeTargetCount + 1u) * dc : dc;
+    return window;
+}
+
+void LayerTweaker::updateWindowedBuffer(gfx::UniformBufferPtr& buffer,
+                                        gfx::Context& context,
+                                        const void* data,
+                                        std::size_t elementSize,
+                                        std::size_t count,
+                                        const DrapeUBOWindow& window) {
+    const std::size_t totalBytes = elementSize * std::max<std::size_t>(window.total, window.base + count);
+    if (!buffer || buffer->getSize() < totalBytes) {
+        std::vector<std::uint8_t> initial(totalBytes, 0);
+        buffer = context.createUniformBuffer(initial.data(), totalBytes, false, true);
+    }
+    buffer->update(data, elementSize * count, elementSize * window.base);
+}
+#endif
+
 void LayerTweaker::updateProperties(Immutable<style::LayerProperties> newProps) {
     evaluatedProperties = std::move(newProps);
     propertiesUpdated = true;
