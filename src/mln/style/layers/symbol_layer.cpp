@@ -1418,6 +1418,27 @@ Value SymbolLayer::serialize() const {
 }
 
 std::optional<Error> SymbolLayer::setPropertyInternal(const std::string& name, const Convertible& value) {
+    // Newer style-spec overlap properties. Native models these with the boolean
+    // icon-allow-overlap / text-allow-overlap, so map them instead of rejecting
+    // the layer (which would otherwise be dropped by the style parser).
+    if (name == "icon-overlap" || name == "text-overlap") {
+        bool allowOverlap = true;
+        Error overlapError;
+        if (auto stringValue = convert<std::string>(value, overlapError)) {
+            allowOverlap = (*stringValue != "never");
+        } else if (auto boolValue = convert<bool>(value, overlapError)) {
+            allowOverlap = *boolValue;
+        } else {
+            return std::nullopt;
+        }
+        if (name == "icon-overlap") {
+            setIconAllowOverlap(PropertyValue<bool>(allowOverlap));
+        } else {
+            setTextAllowOverlap(PropertyValue<bool>(allowOverlap));
+        }
+        return std::nullopt;
+    }
+
     const auto it = layerProperties.find(name.c_str());
     if (it == layerProperties.end()) return Error{"layer '" + getID() + "' doesn't support property '" + name + "'"};
 

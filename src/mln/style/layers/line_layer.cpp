@@ -647,7 +647,10 @@ std::optional<Error> LineLayer::setPropertyInternal(const std::string& name, con
     }
     if (property == Property::LineDasharray) {
         Error error;
-        const auto& typedValue = convert<PropertyValue<std::vector<float>>>(value, error, false, false);
+        // Allow data-driven line-dasharray: the line bucket evaluates the
+        // evaluated property per feature, so styles that vary the dash pattern
+        // per feature (e.g. hazard areas) are supported.
+        const auto& typedValue = convert<PropertyValue<std::vector<float>>>(value, error, true, false);
         if (!typedValue) {
             return error;
         }

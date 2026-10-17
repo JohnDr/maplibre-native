@@ -180,6 +180,11 @@ Value ColorReliefLayer::serialize() const {
 }
 
 std::optional<Error> ColorReliefLayer::setPropertyInternal(const std::string& name, const Convertible& value) {
+    // Newer style-spec `resampling` (texture filtering). Native color-relief
+    // currently always samples linearly, so accept the property without
+    // rejecting the whole layer.
+    if (name == "resampling") return std::nullopt;
+
     const auto it = layerProperties.find(name.c_str());
     if (it == layerProperties.end()) return Error{"layer '" + getID() + "' doesn't support property '" + name + "'"};
 
