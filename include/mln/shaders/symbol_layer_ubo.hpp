@@ -33,7 +33,7 @@ struct alignas(16) SymbolDrawableUBO {
     /* 264 */ /*bool*/ int is_variable_anchor;
     /* 268 */ float pitched_scale;
     /* 272 */ std::array<float, 2> translation;
-    /* 280 */ float pad1;
+    /* 280 */ float elevation; // terrain elevation (world pixels) under this tile, applied to the symbol anchor
     /* 284 */ float pad2;
     /* 288 */
 };

@@ -20,6 +20,7 @@
 
 #include <map>
 #include <memory>
+#include <functional>
 #include <set>
 #include <tuple>
 #include <string>
@@ -49,6 +50,8 @@ using DrawablePtr = std::shared_ptr<Drawable>;
 class DynamicTextureAtlas;
 using DynamicTextureAtlasPtr = std::shared_ptr<gfx::DynamicTextureAtlas>;
 } // namespace gfx
+
+class UnwrappedTileID;
 
 namespace style {
 class LayerProperties;
@@ -116,6 +119,12 @@ public:
     LayerGroupBase* getGlobeDepthLayerGroup() const { return globeDepthPass.getLayerGroup(); }
 
     LayerGroupBase* getTerrainLayerGroup() const { return terrainPass.getLayerGroup(); }
+
+    // Sampler of the terrain elevation (world pixels) at a tile centre, for symbol elevation.
+    std::function<float(const UnwrappedTileID&)> getTerrainElevationFunction(const TransformState& state,
+                                                                             double exaggeration) {
+        return terrainPass.elevationFunction(state, exaggeration);
+    }
 
     // True when per-tile terrain drape targets exist: the drape-eligible layers are rendered into their textures and
     // drawn by the terrain, so they must not also be drawn directly (their drawables are skipped); the remaining

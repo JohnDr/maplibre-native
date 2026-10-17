@@ -21,7 +21,6 @@
 #include <mln/util/constants.hpp>
 #include <mln/util/projection.hpp>
 #include <mln/util/tile_cover.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
@@ -258,6 +257,29 @@ void TerrainPass::applyDrapeTextures(
             drawable.setTexture(it->second, shaders::idTerrainDrapeTexture);
         }
     });
+}
+
+std::function<float(const UnwrappedTileID&)> TerrainPass::elevationFunction(const TransformState& state,
+                                                                            double exaggeration) {
+    if (!terrain) {
+        return {};
+    }
+    TerrainTileManager* manager = terrain.get();
+    const double scale = state.getScale();
+    const double worldSize = Projection::worldSize(scale);
+    const uint8_t zoom = demZoom;
+    const double metersPerPixel = Projection::getMetersPerPixelAtLatitude(state.getLatLng().latitude(), state.getZoom());
+    if (metersPerPixel <= 0.0) {
+        return {};
+    }
+    return [manager, scale, worldSize, zoom, metersPerPixel, exaggeration](const UnwrappedTileID& tileID) -> float {
+        const double n = std::ldexp(1.0, tileID.canonical.z);
+        const double wx = (tileID.canonical.x + 0.5) / n * worldSize;
+        const double wy = (tileID.canonical.y + 0.5) / n * worldSize;
+        const LatLng latLng = Projection::unproject({wx, wy}, scale);
+        const double meters = manager->getElevation(latLng, zoom);
+        return static_cast<float>(meters * exaggeration / metersPerPixel);
+    };
 }
 
 } // namespace mln

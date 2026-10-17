@@ -68,7 +68,7 @@ struct SymbolDrawableUBO {
     bool is_variable_anchor;
     float pitched_scale;
     vec2 translation;
-    float pad1;
+    float elevation;
     float pad2;
 };
 
@@ -158,7 +158,7 @@ void main() {
     }
 
     const vec2 translated_a_pos = a_pos + drawable.translation;
-    const vec4 projectedPoint = projectTileWithElevation(translated_a_pos, 0.0, projection);
+    const vec4 projectedPoint = projectTileWithElevation(translated_a_pos, drawable.elevation, projection);
     const float camera_to_anchor_distance = projectedPoint.w;
     // See comments in symbol_sdf.vertex
     const float distance_ratio = drawable.pitch_with_map ?
@@ -178,7 +178,7 @@ void main() {
     float symbol_rotation = 0.0;
     if (drawable.rotate_symbol) {
         // See comments in symbol_sdf.vertex
-        const vec4 offsetProjectedPoint = projectTileWithElevation(translated_a_pos + vec2(1, 0), 0.0, projection);
+        const vec4 offsetProjectedPoint = projectTileWithElevation(translated_a_pos + vec2(1, 0), drawable.elevation, projection);
 
         const vec2 a = projectedPoint.xy / projectedPoint.w;
         const vec2 b = offsetProjectedPoint.xy / offsetProjectedPoint.w;
@@ -196,7 +196,7 @@ void main() {
     } else if (drawable.pitch_with_map) {
         projected_pos = drawable.label_plane_matrix * vec4(projected_pos_xy + drawable.translation, 0.0, 1.0);
     } else {
-        projected_pos = drawable.label_plane_matrix * projectTileWithElevation(projected_pos_xy + drawable.translation, 0.0, projection);
+        projected_pos = drawable.label_plane_matrix * projectTileWithElevation(projected_pos_xy + drawable.translation, drawable.elevation, projection);
     }
     const float z = float(drawable.pitch_with_map) * projected_pos.z / projected_pos.w;
     const vec2 posOffset = a_offset * max(a_minFontScale, fontScale) / 32.0 + a_pxoffset / 16.0;
@@ -328,7 +328,7 @@ struct SymbolDrawableUBO {
     bool is_variable_anchor;
     float pitched_scale;
     vec2 translation;
-    float pad1;
+    float elevation;
     float pad2;
 };
 
@@ -452,7 +452,7 @@ void main() {
     }
 
     const vec2 translated_a_pos = a_pos + drawable.translation;
-    const vec4 projectedPoint = projectTileWithElevation(translated_a_pos, 0.0, projection);
+    const vec4 projectedPoint = projectTileWithElevation(translated_a_pos, drawable.elevation, projection);
     const float camera_to_anchor_distance = projectedPoint.w;
     // If the label is pitched with the map, layout is done in pitched space,
     // which makes labels in the distance smaller relative to viewport space.
@@ -479,7 +479,7 @@ void main() {
         // Point labels with 'rotation-alignment: map' are horizontal with respect to tile units
         // To figure out that angle in projected space, we draw a short horizontal line in tile
         // space, project it, and measure its angle in projected space.
-        const vec4 offsetProjectedPoint = projectTileWithElevation(translated_a_pos + vec2(1, 0), 0.0, projection);
+        const vec4 offsetProjectedPoint = projectTileWithElevation(translated_a_pos + vec2(1, 0), drawable.elevation, projection);
 
         const vec2 a = projectedPoint.xy / projectedPoint.w;
         const vec2 b = offsetProjectedPoint.xy / offsetProjectedPoint.w;
@@ -497,7 +497,7 @@ void main() {
     } else if (drawable.pitch_with_map) {
         projected_pos = drawable.label_plane_matrix * vec4(projected_pos_xy + drawable.translation, 0.0, 1.0);
     } else {
-        projected_pos = drawable.label_plane_matrix * projectTileWithElevation(projected_pos_xy + drawable.translation, 0.0, projection);
+        projected_pos = drawable.label_plane_matrix * projectTileWithElevation(projected_pos_xy + drawable.translation, drawable.elevation, projection);
     }
     const float z = float(drawable.pitch_with_map) * projected_pos.z / projected_pos.w;
     const vec2 pos_rot = a_offset / 32.0 * fontScale + a_pxoffset;
@@ -706,7 +706,7 @@ struct SymbolDrawableUBO {
     bool is_variable_anchor;
     float pitched_scale;
     vec2 translation;
-    float pad1;
+    float elevation;
     float pad2;
 };
 
@@ -832,7 +832,7 @@ void main() {
     }
 
     const vec2 translated_a_pos = a_pos + drawable.translation;
-    const vec4 projectedPoint = projectTileWithElevation(translated_a_pos, 0.0, projection);
+    const vec4 projectedPoint = projectTileWithElevation(translated_a_pos, drawable.elevation, projection);
     const float camera_to_anchor_distance = projectedPoint.w;
     // If the label is pitched with the map, layout is done in pitched space,
     // which makes labels in the distance smaller relative to viewport space.
@@ -859,7 +859,7 @@ void main() {
         // Point labels with 'rotation-alignment: map' are horizontal with respect to tile units
         // To figure out that angle in projected space, we draw a short horizontal line in tile
         // space, project it, and measure its angle in projected space.
-        const vec4 offsetProjectedPoint = projectTileWithElevation(translated_a_pos + vec2(1, 0), 0.0, projection);
+        const vec4 offsetProjectedPoint = projectTileWithElevation(translated_a_pos + vec2(1, 0), drawable.elevation, projection);
 
         const vec2 a = projectedPoint.xy / projectedPoint.w;
         const vec2 b = offsetProjectedPoint.xy / offsetProjectedPoint.w;
@@ -877,7 +877,7 @@ void main() {
     } else if (drawable.pitch_with_map) {
         projected_pos = drawable.label_plane_matrix * vec4(projected_pos_xy + drawable.translation, 0.0, 1.0);
     } else {
-        projected_pos = drawable.label_plane_matrix * projectTileWithElevation(projected_pos_xy + drawable.translation, 0.0, projection);
+        projected_pos = drawable.label_plane_matrix * projectTileWithElevation(projected_pos_xy + drawable.translation, drawable.elevation, projection);
     }
     const float z = float(drawable.pitch_with_map) * projected_pos.z / projected_pos.w;
     const vec2 pos_rot = a_offset / 32.0 * fontScale;

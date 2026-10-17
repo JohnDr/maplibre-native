@@ -4,6 +4,7 @@
 #include <mln/renderer/render_light.hpp>
 #include <mln/renderer/render_source.hpp>
 #include <mln/util/mat4.hpp>
+#include <functional>
 #include <optional>
 #include <mln/map/mode.hpp>
 #include <mln/map/transform_state.hpp>
@@ -81,6 +82,9 @@ public:
     // When set, overrides the camera projection for this render pass. Used to render layer groups into a per-tile
     // terrain drape target with a per-tile orthographic projection.
     std::optional<mat4> projMatrixOverride;
+
+    // Samples the terrain elevation (world pixels) at a tile's centre, for symbol elevation. Null without terrain.
+    std::function<float(const UnwrappedTileID&)> terrainElevationFn;
 
     RenderStaticData& staticData;
     LineAtlas& lineAtlas;

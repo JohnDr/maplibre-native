@@ -48,6 +48,9 @@ public:
     /// Bind each terrain drawable to the draped texture of its own tile (per-tile RTT).
     void applyDrapeTextures(const std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr>& textures);
 
+    /// A function sampling the terrain elevation (world pixels) at a tile's centre, for symbol elevation.
+    std::function<float(const UnwrappedTileID&)> elevationFunction(const TransformState& state, double exaggeration);
+
 private:
     TileLayerGroupPtr layerGroup;
     gfx::ShaderProgramBasePtr shader;

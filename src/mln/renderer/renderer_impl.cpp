@@ -255,6 +255,10 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
     // - LAYER GROUP UPDATE ------------------------------------------------------------------------
     // Updates all layer groups and process changes
     if (staticData && staticData->shaders) {
+        if (updateParameters && updateParameters->terrainTileset) {
+            parameters.terrainElevationFn = orchestrator.getTerrainElevationFunction(
+                renderTreeParameters.transformParams.state, updateParameters->terrainExaggeration);
+        }
         orchestrator.updateLayers(*staticData->shaders,
                                   context,
                                   renderTreeParameters.transformParams.state,

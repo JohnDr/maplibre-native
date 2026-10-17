@@ -190,6 +190,9 @@ void SymbolLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintParamete
         const auto& sizeBinder = isText ? bucket->textSizeBinder : bucket->iconSizeBinder;
         const auto size = sizeBinder->evaluateForZoom(currentZoom);
 
+        // Terrain elevation (world pixels) under this symbol's tile, so the symbol sits on the draped surface.
+        const float symbolElevation = parameters.terrainElevationFn ? parameters.terrainElevationFn(tileID) : 0.0F;
+
 #if MLN_UBO_CONSOLIDATION
         drawableUBOVector[i] = {
 #else
@@ -222,7 +225,7 @@ void SymbolLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintParamete
             .is_variable_anchor = hasVariablePlacement,
             .pitched_scale = pitchedScale,
             .translation = tileTranslation,
-            .pad1 = 0,
+            .elevation = symbolElevation,
             .pad2 = 0,
         };
 
