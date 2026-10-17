@@ -128,14 +128,91 @@ struct ProjectionUBO {
     vec4 tile_mercator_coords;
     vec4 clipping_plane;
     float projection_transition;
+    float depth_offset;
     float pad1;
     float pad2;
-    float pad3;
 };
+
+// Pole vertices carry these sentinel Y values in their raw position.
+#define GLOBE_POLE_NORTH_Y -32767.5
+#define GLOBE_POLE_SOUTH_Y 32766.5
+
+#ifdef PROJECTION_GLOBE
+
+#define GLOBE_RADIUS 6371008.8
+
+// Tile position (0..EXTENT) to a point on the unit sphere; the pole sentinels in rawPos map to the poles.
+vec3 projectToSphere(vec2 translatedPos, vec2 rawPos, ProjectionUBO projection) {
+    const vec2 mercator_pos = projection.tile_mercator_coords.xy + projection.tile_mercator_coords.zw * translatedPos;
+    const float spherical_x = mercator_pos.x * M_PI * 2.0 + M_PI;
+    // sin/cos of the latitude from the Mercator Y via tangent half-angle identities: no atan, and float32 precision survives near the equator.
+    const float t = exp(M_PI - (mercator_pos.y * M_PI * 2.0));
+    const float t2 = t * t;
+    const float denom = t2 + 1.0;
+    const float sin_sy = (t2 - 1.0) / denom;
+    const float cos_sy = (2.0 * t) / denom;
+    vec3 pos = vec3(sin(spherical_x) * cos_sy, sin_sy, cos(spherical_x) * cos_sy);
+    if (rawPos.y < GLOBE_POLE_NORTH_Y) {
+        pos = vec3(0.0, 1.0, 0.0);
+    }
+    if (rawPos.y > GLOBE_POLE_SOUTH_Y) {
+        pos = vec3(0.0, -1.0, 0.0);
+    }
+    return pos;
+}
+
+float globeComputeClippingZ(vec3 spherePos, ProjectionUBO projection) {
+    return 1.0 - (dot(spherePos, projection.clipping_plane.xyz) + projection.clipping_plane.w);
+}
+
+vec4 interpolateProjection(vec2 posInTile, vec3 spherePos, float elevation, ProjectionUBO projection) {
+    const vec3 elevatedPos = spherePos * (1.0 + elevation / GLOBE_RADIUS);
+    vec4 globePosition = projection.matrix * vec4(elevatedPos, 1.0);
+    // Clip the far side of the globe through Z; the layer's depth shift keeps layer order.
+    globePosition.z = globeComputeClippingZ(elevatedPos, projection) * globePosition.w - projection.depth_offset;
+
+    if (projection.projection_transition > 0.999) {
+        return globePosition;
+    }
+
+    const vec4 flatPosition = projection.fallback_matrix * vec4(posInTile, elevation, 1.0);
+    const float z_globeness_threshold = 0.2;
+    vec4 result = globePosition;
+    result.z = mix(0.0, globePosition.z, clamp((projection.projection_transition - z_globeness_threshold) / (1.0 - z_globeness_threshold), 0.0, 1.0));
+    result.xyw = mix(flatPosition.xyw, globePosition.xyw, projection.projection_transition);
+    if ((posInTile.y < GLOBE_POLE_NORTH_Y) || (posInTile.y > GLOBE_POLE_SOUTH_Y)) {
+        result = globePosition;
+        const float poles_hidden_anim_percentage = 0.02;
+        result.z = mix(globePosition.z, 100.0, pow(max((1.0 - projection.projection_transition) / poles_hidden_anim_percentage, 0.0), 8.0));
+    }
+    return result;
+}
+
+vec4 projectTile(vec2 pos, ProjectionUBO projection) {
+    return interpolateProjection(pos, projectToSphere(pos, vec2(0.0, 0.0), projection), 0.0, projection);
+}
+
+// The variant for geometry that can carry pole vertices; rawPos is the untranslated position.
+vec4 projectTile(vec2 pos, vec2 rawPos, ProjectionUBO projection) {
+    return interpolateProjection(pos, projectToSphere(pos, rawPos, projection), 0.0, projection);
+}
+
+#else
 
 vec4 projectTile(vec2 pos, ProjectionUBO projection) {
     return projection.matrix * vec4(pos, 0.0, 1.0);
 }
+
+// Pole vertices only exist on the globe; put them behind the near plane so their triangles are clipped.
+vec4 projectTile(vec2 pos, vec2 rawPos, ProjectionUBO projection) {
+    vec4 result = projection.matrix * vec4(pos, 0.0, 1.0);
+    if (rawPos.y < GLOBE_POLE_NORTH_Y || rawPos.y > GLOBE_POLE_SOUTH_Y) {
+        result.z = -10000000.0;
+    }
+    return result;
+}
+
+#endif
 
 void applySurfaceTransform() {
 #ifdef USE_SURFACE_TRANSFORM

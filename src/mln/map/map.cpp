@@ -5,6 +5,9 @@
 #include <mln/map/map_impl.hpp>
 #include <mln/map/transform.hpp>
 #include <mln/math/angles.hpp>
+#include <mln/style/projection.hpp>
+#include <mln/style/projection_definition.hpp>
+#include <mln/style/style_impl.hpp>
 #include <mln/math/log2.hpp>
 #include <mln/renderer/renderer_frontend.hpp>
 #include <mln/renderer/renderer_observer.hpp>
@@ -426,6 +429,11 @@ ProjectionMode Map::getProjectionMode() const {
 
 void Map::setProjectionType(ProjectionType type) {
     impl->transform.setProjectionType(type);
+    if (impl->style) {
+        auto projection = std::make_unique<style::Projection>();
+        projection->setType(ProjectionDefinition{type == ProjectionType::Globe ? "globe" : "mercator"});
+        impl->style->impl->setProjection(std::move(projection));
+    }
     impl->onUpdate();
 }
 
