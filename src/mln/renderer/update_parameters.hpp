@@ -10,7 +10,7 @@
 #include <mln/util/chrono.hpp>
 #include <mln/util/color.hpp>
 #include <mln/util/immutable.hpp>
-#include <mln/style/sky.hpp>
+#include <mln/style/sky_impl.hpp>
 #include <mln/util/tileset.hpp>
 
 #include <numbers>
@@ -68,7 +68,7 @@ public:
     double terrainExaggeration = 1.0;
 
     // The style's `sky` (none when the style has no sky).
-    std::optional<style::Sky> sky = std::nullopt;
+    std::optional<Immutable<style::Sky::Impl>> sky = std::nullopt;
 };
 
 } // namespace mln

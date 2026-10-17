@@ -90,11 +90,15 @@ const Projection* Style::getProjection() const {
     return impl->getProjection();
 }
 
-std::optional<Sky> Style::getSky() const {
+Sky* Style::getSky() {
     return impl->getSky();
 }
 
-void Style::setSky(std::optional<Sky> sky) {
+const Sky* Style::getSky() const {
+    return impl->getSky();
+}
+
+void Style::setSky(std::unique_ptr<Sky> sky) {
     impl->setSky(std::move(sky));
 }
 

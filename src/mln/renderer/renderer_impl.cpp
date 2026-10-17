@@ -297,6 +297,9 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
         if (auto* sky = orchestrator.getSkyLayerGroup()) {
             sky->upload(*uploadPass);
         }
+        if (auto* atmosphere = orchestrator.getAtmosphereLayerGroup()) {
+            atmosphere->upload(*uploadPass);
+        }
         if (auto* globeDepth = orchestrator.getGlobeDepthLayerGroup()) {
             globeDepth->upload(*uploadPass);
         }
@@ -489,6 +492,11 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
             if (auto* terrain = orchestrator.getTerrainLayerGroup()) {
                 terrain->render(orchestrator, parameters);
             }
+        }
+
+        // The globe's atmosphere goes over the scene (GL JS draws it after the layers).
+        if (auto* atmosphere = orchestrator.getAtmosphereLayerGroup()) {
+            atmosphere->render(orchestrator, parameters);
         }
     };
 

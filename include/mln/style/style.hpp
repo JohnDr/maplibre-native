@@ -62,9 +62,11 @@ public:
 
     void setTerrain(std::unique_ptr<Terrain>);
 
-    // Sky (style-spec `sky`): none unless the style (or the application) sets one.
-    std::optional<Sky> getSky() const;
-    void setSky(std::optional<Sky>);
+    // Sky (style-spec `sky`): none (null) unless the style or the application sets one.
+    Sky* getSky();
+    const Sky* getSky() const;
+
+    void setSky(std::unique_ptr<Sky>);
 
     // Images
     std::optional<Image> getImage(const std::string&) const;

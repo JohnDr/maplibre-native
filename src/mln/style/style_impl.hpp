@@ -9,6 +9,7 @@
 #include <mln/style/light_observer.hpp>
 #include <mln/style/projection_observer.hpp>
 #include <mln/style/terrain_observer.hpp>
+#include <mln/style/sky.hpp>
 #include <mln/sprite/sprite_loader_observer.hpp>
 #include <mln/style/image.hpp>
 #include <mln/style/source.hpp>
@@ -39,6 +40,7 @@ class Style::Impl : public SpriteLoaderObserver,
                     public SourceObserver,
                      public LayerObserver,
                      public LightObserver,
+                     public SkyObserver,
                      public ProjectionObserver,
                      public TerrainObserver,
                      public util::noncopyable {
@@ -93,8 +95,8 @@ public:
     Projection* getProjection() const;
 
     void setTerrain(std::unique_ptr<Terrain>);
-    void setSky(std::optional<Sky>);
-    const std::optional<Sky>& getSky() const;
+    void setSky(std::unique_ptr<Sky>);
+    Sky* getSky() const;
     Terrain* getTerrain() const;
 
     std::optional<Immutable<style::Image::Impl>> getImage(const std::string&) const;
@@ -135,7 +137,7 @@ private:
     std::unique_ptr<Light> light;
     std::unique_ptr<Projection> projection;
     std::unique_ptr<Terrain> terrain;
-    std::optional<Sky> sky;
+    std::unique_ptr<Sky> sky;
     std::unordered_map<std::string, bool> spritesLoadingStatus;
 
     // Defaults
@@ -158,6 +160,9 @@ private:
 
     // LightObserver implementation.
     void onLightChanged(const Light&) override;
+
+    // SkyObserver implementation.
+    void onSkyChanged(const Sky&) override;
 
     // ProjectionObserver implementation.
     void onProjectionChanged(const Projection&) override;

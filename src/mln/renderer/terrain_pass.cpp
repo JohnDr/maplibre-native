@@ -16,6 +16,7 @@
 #include <mln/renderer/paint_parameters.hpp>
 #include <mln/renderer/render_pass.hpp>
 #include <mln/renderer/terrain_tile_manager.hpp>
+#include <mln/renderer/render_sky.hpp>
 #include <mln/renderer/update_parameters.hpp>
 #include <mln/shaders/shader_defines.hpp>
 #include <mln/util/constants.hpp>
@@ -160,7 +161,8 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
                          gfx::Context& context,
                          const TransformState& state,
                          const PaintParameters& paintParameters,
-                         const UpdateParameters& updateParameters) {
+                         const UpdateParameters& updateParameters,
+                         const EvaluatedSky* evaluatedSky) {
     if (!updateParameters.terrainTileset || updateParameters.terrainTileset->tiles.empty()) {
         if (layerGroup) {
             layerGroup->clearDrawables();
@@ -323,8 +325,8 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         fogUBO.depthRange = {1.0f, 2.0f, 0.0f, 0.0f};
         double nearDistance = 1.0;
         double farDistance = 2.0;
-        if (updateParameters.sky && !globeShader && state.getFogDepthRange(nearDistance, farDistance)) {
-            const auto& sky = *updateParameters.sky;
+        if (evaluatedSky != nullptr && !globeShader && state.getFogDepthRange(nearDistance, farDistance)) {
+            const auto& sky = *evaluatedSky;
             const double pitchDegrees = state.getPitch() * 180.0 / std::numbers::pi;
             const double opacity = pitchDegrees < 60.0 ? 0.0 : (pitchDegrees < 70.0 ? (pitchDegrees - 60.0) / 10.0 : 1.0);
             fogUBO.fogColor = {sky.fogColor.r, sky.fogColor.g, sky.fogColor.b, sky.fogColor.a};

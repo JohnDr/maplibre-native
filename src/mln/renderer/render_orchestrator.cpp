@@ -236,6 +236,24 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
         renderLight.evaluate(evaluationParameters);
     }
 
+    // Update the sky.
+    if (updateParameters->sky) {
+        const bool skyChanged = !renderSky || renderSky->impl != *updateParameters->sky;
+        if (!renderSky) {
+            renderSky.emplace(*updateParameters->sky);
+        } else if (skyChanged) {
+            renderSky->impl = *updateParameters->sky;
+        }
+        if (skyChanged) {
+            renderSky->transition(transitionParameters);
+        }
+        if (skyChanged || zoomChanged || renderSky->hasTransition()) {
+            renderSky->evaluate(evaluationParameters);
+        }
+    } else {
+        renderSky.reset();
+    }
+
     const ImageDifference imageDiff = diffImages(imageImpls, updateParameters->images);
     imageImpls = updateParameters->images;
 
@@ -841,7 +859,7 @@ RenderSource* RenderOrchestrator::getRenderSource(const std::string& id) const {
 }
 
 bool RenderOrchestrator::hasTransitions(TimePoint timePoint) const {
-    if (renderLight.hasTransition()) {
+    if (renderLight.hasTransition() || (renderSky && renderSky->hasTransition())) {
         return true;
     }
 
@@ -1019,9 +1037,13 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
 
     globeDepthPass.update(shaders, context, state, *updateParameters, has3D);
 
-    skyPass.update(shaders, context, state, paintParameters, *updateParameters);
+    const EvaluatedSky* evaluatedSky = renderSky ? &renderSky->getEvaluated() : nullptr;
+    SunLight sun;
+    sun.position = renderLight.getEvaluated().get<style::LightPosition>().getCartesian();
+    sun.anchoredToMap = renderLight.getEvaluated().get<style::LightAnchor>() == style::LightAnchorType::Map;
+    skyPass.update(shaders, context, state, paintParameters, evaluatedSky, sun, updateParameters->backgroundColor);
 
-    terrainPass.update(shaders, context, state, paintParameters, *updateParameters);
+    terrainPass.update(shaders, context, state, paintParameters, *updateParameters, evaluatedSky);
 
     // Terrain drape: one tile-sized offscreen target per terrain tile, holding the draped map layers.
     const bool terrainEnabled = updateParameters->terrainTileset.has_value() &&

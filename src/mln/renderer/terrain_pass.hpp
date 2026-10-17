@@ -25,6 +25,7 @@ class ShaderRegistry;
 
 class TransformState;
 class UpdateParameters;
+struct EvaluatedSky;
 class PaintParameters;
 class TerrainTileManager;
 
@@ -35,7 +36,7 @@ public:
     TerrainPass();
     ~TerrainPass();
 
-    void update(gfx::ShaderRegistry&, gfx::Context&, const TransformState&, const PaintParameters&, const UpdateParameters&);
+    void update(gfx::ShaderRegistry&, gfx::Context&, const TransformState&, const PaintParameters&, const UpdateParameters&, const EvaluatedSky*);
 
     /// The layer group holding the terrain drawables, or null before the first enable.
     LayerGroupBase* getLayerGroup() const { return layerGroup.get(); }

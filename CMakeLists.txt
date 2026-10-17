@@ -640,6 +640,8 @@ list(APPEND SRC_FILES
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/render_static_data.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/globe_depth_pass.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/globe_depth_pass.hpp
+    ${PROJECT_SOURCE_DIR}/src/mln/renderer/render_sky.cpp
+    ${PROJECT_SOURCE_DIR}/src/mln/renderer/render_sky.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/sky_pass.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/sky_pass.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/terrain_pass.cpp
@@ -718,6 +720,7 @@ list(APPEND SRC_FILES
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/projection.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/terrain.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/sky.cpp
+    ${PROJECT_SOURCE_DIR}/src/mln/style/sky.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/position.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/property_value.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/hillshade_conversions.cpp

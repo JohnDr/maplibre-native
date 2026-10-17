@@ -496,6 +496,11 @@ enum {
 };
 
 enum {
+    idAtmospherePosVertexAttribute,
+    atmosphereVertexAttributeCount
+};
+
+enum {
     idTerrainPosVertexAttribute,
     terrainVertexAttributeCount
 };

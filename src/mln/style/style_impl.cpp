@@ -131,7 +131,7 @@ void Style::Impl::parse(const std::string& json_) {
     setLight(std::make_unique<Light>(parser.light));
     setProjection(std::make_unique<Projection>(parser.projection));
     setTerrain(std::make_unique<Terrain>(parser.terrain));
-    setSky(parser.sky);
+    setSky(parser.sky ? std::make_unique<Sky>(*parser.sky) : nullptr);
 
     if (fileSource) {
         if (parser.sprites.empty()) {
@@ -276,16 +276,20 @@ void Style::Impl::setTerrain(std::unique_ptr<Terrain> terrain_) {
     onTerrainChanged(*terrain);
 }
 
-void Style::Impl::setSky(std::optional<Sky> sky_) {
-    if (sky == sky_) {
-        return;
-    }
+void Style::Impl::setSky(std::unique_ptr<Sky> sky_) {
     sky = std::move(sky_);
+    if (sky) {
+        sky->setObserver(this);
+    }
     observer->onUpdate();
 }
 
-const std::optional<Sky>& Style::Impl::getSky() const {
-    return sky;
+Sky* Style::Impl::getSky() const {
+    return sky.get();
+}
+
+void Style::Impl::onSkyChanged(const Sky&) {
+    observer->onUpdate();
 }
 
 Terrain* Style::Impl::getTerrain() const {
