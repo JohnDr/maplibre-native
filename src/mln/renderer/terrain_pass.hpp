@@ -4,6 +4,7 @@
 #include <mln/gfx/uniform_buffer.hpp>
 #include <mln/gfx/texture2d.hpp>
 #include <mln/shaders/shader_program_base.hpp>
+#include <mln/map/transform_state.hpp>
 #include <mln/tile/tile_id.hpp>
 #include <mln/util/tileset.hpp>
 
@@ -45,6 +46,9 @@ public:
     /// The terrain tiles currently covered, in the same order as their drape textures.
     const std::vector<OverscaledTileID>& getCover() const { return cover; }
 
+    /// Per-tile DEM elevation range for the tile covers (GL JS `Terrain#getMinMaxElevation`), or null without terrain.
+    std::shared_ptr<const TileElevationRangeFn> elevationRangeFunction(double exaggeration) const;
+
     /// Bind each terrain drawable to the draped texture of its own tile (per-tile RTT).
     void applyDrapeTextures(const std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr>& textures);
 
@@ -57,7 +61,7 @@ private:
     gfx::UniformBufferPtr projectionUniformBuffer;
     std::vector<OverscaledTileID> cover;
     bool globeShader = false;
-    std::unique_ptr<TerrainTileManager> terrain;
+    std::shared_ptr<TerrainTileManager> terrain;
     std::optional<Tileset> tileset;
     std::function<void()> onTileLoaded;
     uint8_t demZoom = 0;

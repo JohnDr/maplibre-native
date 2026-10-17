@@ -40,6 +40,10 @@ struct TileCoverParameters {
     double tileLodScale = 1;
     double tileLodPitchThreshold = (60.0 / 180.0) * std::numbers::pi;
     TileLodMode tileLodMode = TileLodMode::Default;
+    /// With terrain (the transform state carries a tile elevation range), choose each tile's zoom by its distance from
+    /// the camera, as GL JS does (`allowVariableZoom` is true with terrain), so a pitched view does not need thousands
+    /// of tiles of one zoom out to the horizon. Needs a zoom range wider than a single level.
+    bool terrainVariableZoom = false;
 };
 
 int32_t coveringZoomLevel(double z, style::SourceType type, uint16_t tileSize) noexcept;

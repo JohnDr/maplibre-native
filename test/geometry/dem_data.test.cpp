@@ -159,3 +159,23 @@ TEST(DEMData, GetElevationBilinearMidpoint) {
         }
     }
 };
+
+// Terrain meshes sample their edge row at x == dim: after the neighbours backfill each other's border, both tiles read
+// the same elevations along the shared edge, so a mesh edge has no crack.
+TEST(DEMData, SharedEdgeIsContinuousAfterBackfill) {
+    PremultipliedImage left = fakeImage({8, 8});
+    PremultipliedImage right = fakeImage({8, 8});
+    DEMData demLeft(left, Tileset::RasterEncoding::Terrarium);
+    DEMData demRight(right, Tileset::RasterEncoding::Terrarium);
+
+    demLeft.backfillBorder(demRight, 1, 0);
+    demRight.backfillBorder(demLeft, -1, 0);
+
+    // Rows 0..7 only: the corner pixel below the edge belongs to the diagonal and south neighbours (not loaded here;
+    // the terrain mesh skirt covers that last cell until they arrive).
+    for (double y = 0.0; y <= 7.0; y += 0.5) {
+        EXPECT_DOUBLE_EQ(demLeft.getElevation(8.0, y), demRight.getElevation(0.0, y)) << "y=" << y;
+    }
+    // The border pixel is addressable below zero as well (used for edge slopes).
+    EXPECT_DOUBLE_EQ(demRight.getElevation(-1.0, 3.0), static_cast<double>(demRight.get(-1, 3)));
+}

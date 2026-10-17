@@ -6,9 +6,9 @@
 namespace mln {
 namespace shaders {
 
-/// Renders the terrain surface: a 3D mesh whose vertices carry a world-pixel elevation and a precomputed shade.
-/// The third vertex component is already in world pixels (metres converted with `pixelsPerMeter` on the CPU), so the
-/// vertex shader is the same projection the other 3D layers use.
+/// Renders the terrain surface: a 3D mesh whose vertices carry an elevation in metres and a precomputed shade.
+/// The projection matrix scales z by pixels-per-metre (as for every 3D layer), so the vertex shader is the same
+/// projection the other 3D layers use.
 template <>
 struct ShaderSource<BuiltIn::TerrainShader, gfx::Backend::Type::Vulkan> {
     static constexpr const char* name = "TerrainShader";
@@ -21,7 +21,7 @@ struct ShaderSource<BuiltIn::TerrainShader, gfx::Backend::Type::Vulkan> {
 )";
     static constexpr auto vertex = R"(
 
-// xy: tile units (0..EXTENT); z: world-pixel elevation; w: shade in [0, 1].
+// xy: tile units (0..EXTENT); z: elevation in metres; w: shade in [0, 1].
 layout(location = 0) in vec4 in_position;
 
 layout(push_constant) uniform Constants {
@@ -55,14 +55,13 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
     // Per-tile drape: this tile's own texture, shaded by the precomputed hillshade. Where no draping layer was
-    // rendered (black, e.g. before imagery loads) fall back to a hypsometric tint so the relief is still visible.
+    // rendered (exactly black, e.g. before imagery loads; near-black imagery such as deep water stays as drawn) fall back to a hypsometric tint so the relief is still visible.
     const vec4 draped = texture(drapeSampler, v_uv);
     const float shade = clamp(v_shade, 0.0, 1.0);
-    const float lum = max(draped.r, max(draped.g, draped.b));
     const vec3 low = vec3(0.24, 0.42, 0.24);
     const vec3 high = vec3(0.86, 0.83, 0.72);
     const vec3 tint = mix(low, high, shade);
-    out_color = vec4((lum < 0.02 ? tint : draped.rgb) * shade, 1.0);
+    out_color = vec4((draped.a < 0.5 ? tint : draped.rgb) * shade, 1.0);
 }
 )";
 };

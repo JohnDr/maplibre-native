@@ -10,7 +10,9 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <tuple>
+#include <vector>
 
 namespace mln {
 
@@ -42,6 +44,22 @@ public:
     /// that is coarser. When every tile it tried definitively has no data (a failed request), the terrain there is
     /// flat and the result is 0 metres.
     std::optional<double> sampleElevation(const LatLng& latLng, uint8_t zoom, uint8_t fallbackZoom);
+
+    /// The elevation range (metres) of the terrain in tile `id`: GL JS `Terrain#getMinMaxElevation`. Uses the loaded DEM
+    /// tile at `id`'s zoom, else the nearest loaded ancestor; nullopt when none has loaded. Never requests a tile.
+    std::optional<std::pair<double, double>> getMinMaxElevation(const CanonicalTileID& id) const;
+
+    /// Requests the DEM tile at `zoom` that contains `id` (a no-op when `id` is coarser), so that a coarse elevation
+    /// range exists for the tile cover to use while the fine tiles are still unknown.
+    void requestAncestor(const CanonicalTileID& id, uint8_t zoom);
+
+    /// The tile's request failed or returned no data recently (a source without tiles over open sea): the terrain there
+    /// is flat. False while it is loading and once it has loaded.
+    bool isMissing(const CanonicalTileID& id) const { return isFailed(id); }
+
+    /// Tiles whose DEM border was changed by a neighbour's data since the last call (their meshes must be rebuilt so
+    /// shared edges agree; GL JS `DEMData#backfillBorder`).
+    std::vector<CanonicalTileID> takeUpdatedTiles();
 
     /// Whether any DEM tile has been loaded.
     bool hasData() const;
@@ -79,6 +97,7 @@ private:
     Tileset tileset;
     std::function<void()> onTileLoaded;
     std::map<std::tuple<uint8_t, uint32_t, uint32_t>, Entry> tiles;
+    std::set<std::tuple<uint8_t, uint32_t, uint32_t>> updatedTiles;
 };
 
 } // namespace mln

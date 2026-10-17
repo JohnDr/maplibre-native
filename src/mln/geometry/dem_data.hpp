@@ -19,7 +19,8 @@ public:
     int32_t get(int32_t x, int32_t y) const;
     const std::array<float, 4>& getUnpackVector() const;
 
-    /// Bilinearly interpolated elevation, in metres, at the continuous tile coordinate (`x`, `y`) within `[0, dim]`.
+    /// Bilinearly interpolated elevation, in metres, at the continuous tile coordinate (`x`, `y`) within `[0, dim]`
+    /// (coordinates down to -1 read the border pixel).
     /// Mirrors GL JS `DEMData#getElevation`, adapted to this class's one-pixel border.
     double getElevation(double x, double y) const;
 
@@ -29,6 +30,9 @@ public:
     const int32_t dim;
     const int32_t stride;
     const Tileset::RasterEncoding encoding;
+    /// The lowest and highest elevation in the tile, in metres (GL JS `DEMData#min`/`#max`).
+    double minElevation = 0.0;
+    double maxElevation = 0.0;
 
 private:
     std::shared_ptr<PremultipliedImage> image;

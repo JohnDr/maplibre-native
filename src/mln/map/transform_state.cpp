@@ -899,7 +899,7 @@ ScreenCoordinate TransformState::latLngToScreenCoordinate(const LatLng& latLng, 
     }
 
     Point<double> pt = projection->project(latLng, scale) / util::tileSize_D;
-    vec4 c = {{pt.x, pt.y, z / util::tileSize_D, 1}}; // on the plane through the centre (see screenCoordinateToTileCoordinate)
+    vec4 c = {{pt.x, pt.y, getCenterAltitude(), 1}}; // on the plane through the centre (see screenCoordinateToTileCoordinate)
     matrix::transformMat4(p, c, getCoordMatrix());
     return {p[0] / p[3], size.height - p[1] / p[3]};
 }
@@ -919,8 +919,9 @@ TileCoordinate TransformState::screenCoordinateToTileCoordinate(const ScreenCoor
         return {.p = {p.x, p.y}, .z = static_cast<double>(atZoom)};
     }
 
-    // z is the centre altitude in pixels; the matrices take tile units (pixels / tile size).
-    const float targetZ = onCenterPlane ? static_cast<float>(z / util::tileSize_D) : 0.0f;
+    // The matrices take z in metres (the camera matrix scales z by pixels-per-metre), so the plane through the centre
+    // is at the centre altitude in metres.
+    const float targetZ = onCenterPlane ? static_cast<float>(getCenterAltitude()) : 0.0f;
 
     double flippedY = size.height - point.y;
 

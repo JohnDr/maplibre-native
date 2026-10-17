@@ -93,6 +93,35 @@ std::optional<double> TerrainTileManager::sampleElevation(const LatLng& latLng, 
     return stillLoading ? std::nullopt : std::optional<double>(0.0);
 }
 
+std::optional<std::pair<double, double>> TerrainTileManager::getMinMaxElevation(const CanonicalTileID& id) const {
+    for (int z = id.z; z >= 0; --z) {
+        const int shift = id.z - z;
+        const auto it = tiles.find(keyFor(CanonicalTileID(static_cast<uint8_t>(z), id.x >> shift, id.y >> shift)));
+        if (it != tiles.end() && it->second.data) {
+            return std::make_pair(it->second.data->minElevation, it->second.data->maxElevation);
+        }
+    }
+    return std::nullopt;
+}
+
+void TerrainTileManager::requestAncestor(const CanonicalTileID& id, uint8_t zoom) {
+    if (id.z < zoom) {
+        return;
+    }
+    const int shift = id.z - zoom;
+    getDEMData(CanonicalTileID(zoom, id.x >> shift, id.y >> shift));
+}
+
+std::vector<CanonicalTileID> TerrainTileManager::takeUpdatedTiles() {
+    std::vector<CanonicalTileID> result;
+    result.reserve(updatedTiles.size());
+    for (const auto& [z, x, y] : updatedTiles) {
+        result.emplace_back(z, x, y);
+    }
+    updatedTiles.clear();
+    return result;
+}
+
 bool TerrainTileManager::hasData() const {
     for (const auto& [key, entry] : tiles) {
         if (entry.data) {
@@ -165,6 +194,26 @@ void TerrainTileManager::onTileResponse(const CanonicalTileID& id,
     try {
         PremultipliedImage image = decodeImage(*res.data);
         it->second.data = std::make_shared<DEMData>(image, encoding);
+        updatedTiles.insert(it->first); // a tile first built flat (while missing/retrying) must be rebuilt
+        // Share edge and corner pixels with the loaded neighbours at the same zoom, so a tile's mesh edge matches the
+        // neighbour's (a 1-pixel border around each DEM, as the hillshade pipeline does).
+        const auto tilesAcross = static_cast<int64_t>(1) << id.z;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int64_t ny = static_cast<int64_t>(id.y) + dy;
+                if ((dx == 0 && dy == 0) || ny < 0 || ny >= tilesAcross) {
+                    continue;
+                }
+                const auto nx = static_cast<uint32_t>((static_cast<int64_t>(id.x) + dx + tilesAcross) % tilesAcross);
+                const auto neighbour = tiles.find(keyFor(CanonicalTileID(id.z, nx, static_cast<uint32_t>(ny))));
+                if (neighbour == tiles.end() || !neighbour->second.data) {
+                    continue;
+                }
+                it->second.data->backfillBorder(*neighbour->second.data, static_cast<int8_t>(dx), static_cast<int8_t>(dy));
+                neighbour->second.data->backfillBorder(*it->second.data, static_cast<int8_t>(-dx), static_cast<int8_t>(-dy));
+                updatedTiles.insert(neighbour->first);
+            }
+        }
         if (onTileLoaded) {
             onTileLoaded();
         }

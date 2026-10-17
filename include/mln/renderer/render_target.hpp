@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mln/gfx/types.hpp>
+#include <mln/util/color.hpp>
 #include <mln/util/size.hpp>
 
 #include <functional>
@@ -30,6 +31,10 @@ class RenderTarget {
 public:
     RenderTarget(gfx::Context& context, const Size size, const gfx::TextureChannelDataType type);
     ~RenderTarget();
+
+    /// The colour the target is cleared to before rendering (opaque black by default). The terrain drape clears to
+    /// transparent so "nothing rendered here yet" is distinguishable from genuinely black imagery.
+    void setClearColor(const Color& color) { clearColor = color; }
 
     /// Get the render target texture
     const gfx::Texture2DPtr& getTexture();
@@ -81,6 +86,7 @@ public:
 protected:
     gfx::Context& context;
     std::unique_ptr<gfx::OffscreenTexture> offscreenTexture;
+    Color clearColor{0.0f, 0.0f, 0.0f, 1.0f};
     using LayerGroupMap = std::map<int32_t, LayerGroupBasePtr>;
     LayerGroupMap layerGroupsByLayerIndex;
 };

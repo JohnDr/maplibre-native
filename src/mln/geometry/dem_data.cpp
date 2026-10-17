@@ -44,6 +44,20 @@ DEMData::DEMData(const PremultipliedImage& _image, Tileset::RasterEncoding _enco
     memcpy(data, data + stride, stride * 4);
     // bottom horizontal border with corners
     memcpy(data + (dim + 1) * stride, data + dim * stride, stride * 4);
+
+    if (dim > 0) {
+        int32_t lo = get(0, 0);
+        int32_t hi = lo;
+        for (int32_t y = 0; y < dim; y++) {
+            for (int32_t x = 0; x < dim; x++) {
+                const int32_t value = get(x, y);
+                lo = std::min(lo, value);
+                hi = std::max(hi, value);
+            }
+        }
+        minElevation = lo;
+        maxElevation = hi;
+    }
 }
 
 // This function takes the DEMData from a neighboring tile and backfills the
@@ -97,8 +111,9 @@ int32_t DEMData::get(const int32_t x, const int32_t y) const {
 }
 
 double DEMData::getElevation(double x, double y) const {
-    x = std::clamp(x, 0.0, static_cast<double>(dim));
-    y = std::clamp(y, 0.0, static_cast<double>(dim));
+    // The one-pixel border (backfilled from the neighbouring tiles) is addressable at -1 and `dim`.
+    x = std::clamp(x, -1.0, static_cast<double>(dim));
+    y = std::clamp(y, -1.0, static_cast<double>(dim));
     const auto x0 = static_cast<int32_t>(std::floor(x));
     const auto y0 = static_cast<int32_t>(std::floor(y));
     const auto x1 = std::min(x0 + 1, dim);

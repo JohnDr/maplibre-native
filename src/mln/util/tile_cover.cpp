@@ -644,9 +644,12 @@ std::vector<OverscaledTileID> tileCover(const TileCoverParameters& state,
     const auto& transform = state.transformState;
     const double numTiles = std::pow(2.0, z);
     const double worldSize = Projection::worldSize(transform.getScale());
-    const bool allowVariableZoom = transform.getPitch() > state.tileLodPitchThreshold;
+    const bool terrainLod = state.terrainVariableZoom && transform.getTileElevationRange() != nullptr;
+    const bool allowVariableZoom = terrainLod || transform.getPitch() > state.tileLodPitchThreshold;
     const uint8_t minZoom = allowVariableZoom ? zoomRange.min : z;
-    const uint8_t maxZoom = ((state.tileLodMode == TileLodMode::Distance) && allowVariableZoom) ? zoomRange.max : z;
+    const uint8_t maxZoom = ((state.tileLodMode == TileLodMode::Distance || terrainLod) && allowVariableZoom)
+                                ? zoomRange.max
+                                : z;
     const uint8_t overscaledZoom = std::max(overscaledZ.value_or(z), maxZoom);
     const bool flippedY = transform.getViewportMode() == ViewportMode::FlippedY;
 
@@ -673,6 +676,28 @@ std::vector<OverscaledTileID> tileCover(const TileCoverParameters& state,
     assert(state.tileLodMinRadius >= 1);
     const double radiusOfMaxLvlLodInTiles = std::max(1.0, state.tileLodMinRadius);
 
+    // Terrain: each tile's volume spans its own elevation range in metres, the unit of the frustum's z (GL JS
+    // `getTileBoundingVolume`). Where the range is unknown the volume spans sea level to the centre's elevation.
+    const TileElevationRangeFn* elevationRange = transform.getTileElevationRange();
+    const double centerElevation = elevationRange != nullptr ? transform.getElevation() : 0.0;
+    // Metres to tile units at the cover's zoom (for distances; the frustum test works in metres).
+    const double metersPerPixelHere = Projection::getMetersPerPixelAtLatitude(transform.getLatLng().latitude(),
+                                                                              transform.getZoom());
+    const double metersToTileUnits = metersPerPixelHere > 0.0 ? numTiles / worldSize / metersPerPixelHere : 0.0;
+    const auto setElevationRange = [&](Node& node) {
+        if (elevationRange == nullptr) {
+            return;
+        }
+        double lo = std::min(0.0, centerElevation);
+        double hi = std::max(0.0, centerElevation);
+        if (const auto range = (*elevationRange)(CanonicalTileID(node.zoom, node.x, node.y))) {
+            lo = range->first;
+            hi = range->second;
+        }
+        node.aabb.min[2] = lo;
+        node.aabb.max[2] = hi;
+    };
+
     const auto newRootTile = [&](int16_t wrap) -> Node {
         return {.aabb = AABB({{wrap * numTiles, 0.0, 0.0}}, {{(wrap + 1) * numTiles, numTiles, 0.0}}),
                 .zoom = uint8_t(0),
@@ -681,6 +706,18 @@ std::vector<OverscaledTileID> tileCover(const TileCoverParameters& state,
                 .wrap = wrap,
                 .fullyVisible = false};
     };
+
+    // GL JS `calculateTileZoom` inputs, in tile units at this cover's zoom: the camera's height above the centre and
+    // the camera-to-centre distance (the centre sits on the terrain, at the centre elevation).
+    const globe::TileZoomConstants terrainZoomConstants(transform.getFieldOfView() * 180.0 / std::numbers::pi);
+    const double terrainFovDegrees = transform.getFieldOfView() * 180.0 / std::numbers::pi;
+    const double terrainCenterZoom = transform.getZoom() + (z - std::floor(transform.getZoom()));
+    const double terrainDistanceZ = std::max(std::abs(cameraCoord[2] - centerElevation * metersToTileUnits), 1e-9);
+    // The centre is the map's lat/lng at the centre elevation (GL JS `worldFromLngLat(center, elevation)`), not the
+    // screen-centre ray hit on sea level, which lies kilometres away at high pitch when the centre is elevated.
+    const auto terrainCenterTile = TileCoordinate::fromLatLng(z, transform.getLatLng()).p;
+    const double terrainDistanceToCenter3d = std::hypot(
+        std::hypot(terrainCenterTile.x - cameraCoord[0], terrainCenterTile.y - cameraCoord[1]), terrainDistanceZ);
 
     // Perform depth-first traversal on tile tree to find visible tiles
     std::vector<Node> stack;
@@ -698,6 +735,7 @@ std::vector<OverscaledTileID> tileCover(const TileCoverParameters& state,
     while (!stack.empty()) {
         Node node = stack.back();
         stack.pop_back();
+        setElevationRange(node);
 
         // Use cached visibility information of ancestor nodes
         if (!node.fullyVisible) {
@@ -709,8 +747,24 @@ std::vector<OverscaledTileID> tileCover(const TileCoverParameters& state,
         }
 
         bool shouldSplitTile;
-        if (state.tileLodMode == TileLodMode::Distance) {
-            const vec3 camToTileMercator = vec3Scale(node.aabb.distanceXYZ(cameraCoord), 1.0 / worldSize);
+        if (terrainLod) {
+            const vec3 toTile = node.aabb.distanceXYZ(cameraCoord);
+            const double desired = std::floor(globe::calculateTileZoom(terrainZoomConstants,
+                                                                       terrainCenterZoom,
+                                                                       std::hypot(toTile[0], toTile[1]),
+                                                                       terrainDistanceZ,
+                                                                       terrainDistanceToCenter3d,
+                                                                       terrainFovDegrees));
+            const auto targetZoom = static_cast<uint8_t>(std::clamp(desired, 0.0, static_cast<double>(maxZoom)));
+            shouldSplitTile = node.zoom < targetZoom;
+        } else if (state.tileLodMode == TileLodMode::Distance) {
+            // The box's z is in metres (for the frustum test); the camera coordinate is in tile units.
+            AABB distanceBox = node.aabb;
+            if (elevationRange != nullptr) {
+                distanceBox.min[2] *= metersToTileUnits;
+                distanceBox.max[2] *= metersToTileUnits;
+            }
+            const vec3 camToTileMercator = vec3Scale(distanceBox.distanceXYZ(cameraCoord), 1.0 / worldSize);
             const double distanceToTileMercator = vec3Length(camToTileMercator);
             const double cosPitchToTile = std::max(0.0, camToTileMercator[2] / distanceToTileMercator);
             const double pitchExponent =
@@ -720,7 +774,10 @@ std::vector<OverscaledTileID> tileCover(const TileCoverParameters& state,
                                                                        cameraToCenterDistanceMercator /
                                                                        state.tileLodScale * nominalScale;
         } else {
-            const vec3 distanceXyz = node.aabb.distanceXYZ(centerCoord);
+            vec3 distanceXyz = node.aabb.distanceXYZ(centerCoord);
+            if (elevationRange != nullptr) {
+                distanceXyz[2] = 0.0; // the elevation range must not change the level-of-detail ring
+            }
             const double* longestDim = std::max_element(distanceXyz.data(), distanceXyz.data() + distanceXyz.size());
             assert(longestDim);
 

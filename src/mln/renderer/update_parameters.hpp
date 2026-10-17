@@ -30,7 +30,7 @@ public:
     const float pixelRatio;
     const MapDebugOptions debugOptions;
     const TimePoint timePoint;
-    const TransformState transformState;
+    TransformState transformState; // not const: the orchestrator adds the terrain elevation range
 
     const std::string glyphURL;
     std::shared_ptr<FontFaces> fontFaces;
@@ -60,10 +60,10 @@ public:
     TileLodMode tileLodMode = TileLodMode::Default;
 
     // CFID: custom backdrop colour (space) applied to the render-tree background.
-    std::optional<Color> backgroundColor;
+    std::optional<Color> backgroundColor = std::nullopt;
 
     // CFID: 3D terrain. When the tileset is set, the terrain pass fetches this raster-dem source and drapes it.
-    std::optional<Tileset> terrainTileset;
+    std::optional<Tileset> terrainTileset = std::nullopt;
     double terrainExaggeration = 1.0;
 };
 

@@ -186,6 +186,10 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
         }
     }
 
+    // Terrain: tile covers (every source's, and the terrain's own) bound each tile by its DEM elevation range.
+    updateParameters->transformState.setTileElevationRange(
+        terrainPass.elevationRangeFunction(updateParameters->terrainExaggeration));
+
     const bool zoomChanged = zoomHistory.update(static_cast<float>(updateParameters->transformState.getZoom()),
                                                 updateParameters->timePoint);
 
@@ -1066,6 +1070,7 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
                 if (!rt) {
                     continue;
                 }
+                rt->setClearColor(Color{0.0f, 0.0f, 0.0f, 0.0f}); // transparent: unrendered != black imagery
                 it = terrainDrapeTargets.emplace(key, rt).first;
             }
             for (auto& [index, layerGroup] : layerGroupsByLayerIndex) {

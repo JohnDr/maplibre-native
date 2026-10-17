@@ -10,6 +10,7 @@
 #include <mln/style/terrain.hpp>
 #include <mln/style/source.hpp>
 #include <mln/style/sources/tile_source.hpp>
+#include "../style/sources/tile_source_impl.hpp"
 #include <mln/util/exception.hpp>
 #include <mln/util/logging.hpp>
 #include <mln/util/traits.hpp>
@@ -18,6 +19,18 @@
 #include <mln/gfx/rendering_stats.hpp>
 
 namespace mln {
+
+namespace {
+// The DEM source's tileset: inline in the style, or the TileJSON resolved from its `url` once loaded (as GL JS does).
+const Tileset* resolvedTerrainTileset(const style::TileSource* source) {
+    const auto& urlOrTileset = source->getURLOrTileset();
+    if (urlOrTileset.is<Tileset>()) {
+        return &urlOrTileset.get<Tileset>();
+    }
+    const auto& loaded = source->impl().tileset;
+    return loaded ? &*loaded : nullptr;
+}
+} // namespace
 
 #if !defined(NDEBUG)
 namespace {
@@ -156,9 +169,8 @@ void Map::Impl::onUpdate() {
     if (auto* terrain = style->impl->getTerrain(); terrain != nullptr && terrain->isEnabled()) {
         if (auto* source = style->impl->getSource(terrain->getSource());
             source != nullptr && source->getType() == style::SourceType::RasterDEM) {
-            const auto& urlOrTileset = static_cast<style::TileSource*>(source)->getURLOrTileset();
-            if (urlOrTileset.is<Tileset>()) {
-                params.terrainTileset = urlOrTileset.get<Tileset>();
+            if (const Tileset* resolved = resolvedTerrainTileset(static_cast<style::TileSource*>(source))) {
+                params.terrainTileset = *resolved;
                 params.terrainExaggeration = terrain->getExaggeration();
             }
         }
@@ -183,9 +195,9 @@ void Map::Impl::updateTerrainCamera() {
         if (auto* terrain = style->impl->getTerrain(); terrain != nullptr && terrain->isEnabled()) {
             if (auto* source = style->impl->getSource(terrain->getSource());
                 source != nullptr && source->getType() == style::SourceType::RasterDEM) {
-                const auto& urlOrTileset = static_cast<style::TileSource*>(source)->getURLOrTileset();
-                if (urlOrTileset.is<Tileset>()) {
-                    tileset = &urlOrTileset.get<Tileset>();
+                const Tileset* resolved = resolvedTerrainTileset(static_cast<style::TileSource*>(source));
+                if (resolved != nullptr) {
+                    tileset = resolved;
                     exaggeration = terrain->getExaggeration();
                 }
             }

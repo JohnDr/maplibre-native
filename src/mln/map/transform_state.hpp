@@ -12,8 +12,12 @@
 #include <mln/util/projection.hpp>
 #include <mln/util/size.hpp>
 
+#include <mln/tile/tile_id.hpp>
+
 #include <cstdint>
 #include <array>
+#include <functional>
+#include <utility>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -131,6 +135,9 @@ struct TransformStateProperties {
     std::optional<ProjectionType> projectionType;
     std::optional<EdgeInsets> frustumOffset;
 };
+
+/// The elevation range in metres (exaggeration included) of a tile's terrain, or nullopt when unknown.
+using TileElevationRangeFn = std::function<std::optional<std::pair<double, double>>(const CanonicalTileID&)>;
 
 class TransformState {
 public:
@@ -294,6 +301,10 @@ public:
     /// Sets the centre's altitude to the ground elevation under it (metres above sea level). The camera is lifted with
     /// it, so the map keeps its height above the terrain. Mirrors GL JS `transform.setElevation()`.
     void setElevation(double elevation);
+    /// With terrain, tile covers give each tile a bounding box spanning its own elevation range (GL JS
+    /// `Terrain#getMinMaxElevation` in `getTileBoundingVolume`), so tiles whose terrain rises into view are not culled.
+    void setTileElevationRange(std::shared_ptr<const TileElevationRangeFn> fn) { tileElevationRange = std::move(fn); }
+    const TileElevationRangeFn* getTileElevationRange() const { return tileElevationRange.get(); }
 
     void constrain(double& scale, double& x, double& y) const;
     bool constrainScreen(double& scale_, double& x_, double& y_) const;
@@ -361,6 +372,8 @@ private:
 
     // map position
     double x = 0, y = 0, z = 0;
+    // Terrain elevation range of a tile (see setTileElevationRange).
+    std::shared_ptr<const TileElevationRangeFn> tileElevationRange;
     double bearing = 0;
     double scale = 1;
     double fov = util::DEFAULT_FOV;
