@@ -4,6 +4,7 @@
 #include <mln/gfx/cull_face_mode.hpp>
 #include <mln/gfx/render_pass.hpp>
 #include <mln/map/transform_state.hpp>
+#include <mln/renderer/layer_tweaker.hpp>
 #include <mln/renderer/render_static_data.hpp>
 #include <mln/renderer/render_source.hpp>
 #include <mln/renderer/render_tile.hpp>
@@ -187,11 +188,6 @@ void PaintParameters::clearStencil() {
 }
 
 bool PaintParameters::renderTileClippingMasks(const RenderTiles& renderTiles) {
-    // The clip masks are Mercator tile quads; on the globe they arrive with the tile meshes.
-    if (state.isGlobeRendering()) {
-        return true;
-    }
-
     // We can avoid updating the mask if it already contains the same set of tiles.
     if (!renderTiles || tileIDsCovered(renderTiles, tileClippingMaskIDs)) {
         return true;
@@ -283,7 +279,9 @@ bool PaintParameters::renderTileClippingMasks(const RenderTiles& renderTiles) {
 
 #elif MLN_RENDER_BACKEND_VULKAN
 
+    const bool globe = state.isGlobeRendering();
     std::vector<shaders::ClipUBO> tileUBOs;
+    std::vector<shaders::GlobeClipMask> globeMasks;
     for (const auto& tileRef : *renderTiles) {
         const auto& tileID = tileRef.get().id;
 
@@ -297,6 +295,13 @@ bool PaintParameters::renderTileClippingMasks(const RenderTiles& renderTiles) {
             continue;
         }
 
+        if (globe) {
+            globeMasks.push_back({.projection = LayerTweaker::toProjectionUBO(projectionDataForTile(tileID)),
+                                  .stencilRef = stencilID,
+                                  .tile = tileID.canonical});
+            continue;
+        }
+
         if (tileUBOs.empty()) {
             tileUBOs.reserve(count);
         }
@@ -304,13 +309,17 @@ bool PaintParameters::renderTileClippingMasks(const RenderTiles& renderTiles) {
         tileUBOs.emplace_back(shaders::ClipUBO{matrixForTile(tileID), stencilID});
     }
 
-    if (!tileUBOs.empty()) {
+    if (!tileUBOs.empty() || !globeMasks.empty()) {
 #if !defined(NDEBUG)
         const auto debugGroup = renderPass->createDebugGroup("tile-clip-masks");
 #endif
 
         auto& vulkanContext = static_cast<vulkan::Context&>(context);
-        vulkanContext.renderTileClippingMasks(*renderPass, staticData, tileUBOs);
+        if (globe) {
+            vulkanContext.renderGlobeTileClippingMasks(*renderPass, staticData, globeMasks);
+        } else {
+            vulkanContext.renderTileClippingMasks(*renderPass, staticData, tileUBOs);
+        }
         vulkanContext.renderingStats().stencilUpdates++;
     }
 
