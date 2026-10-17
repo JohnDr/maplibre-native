@@ -552,6 +552,10 @@ uint8_t Map::getPrefetchZoomDelta() const {
     return impl->prefetchZoomDelta;
 }
 
+void Map::setBackgroundColor(const Color& color) {
+    impl->setBackgroundColor(color);
+}
+
 bool Map::isFullyLoaded() const {
     return impl->style->impl->isLoaded() && impl->rendererFullyLoaded;
 }

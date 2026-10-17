@@ -41,6 +41,12 @@ public:
     Impl(RendererFrontend&, MapObserver&, std::shared_ptr<FileSource>, const MapOptions&);
     ~Impl() final;
 
+    // CFID: set the backdrop colour (space) used by the renderer.
+    void setBackgroundColor(const Color& color) {
+        backgroundColor = color;
+        onUpdate();
+    }
+
     // TransformObserver
     void onCameraWillChange(MapObserver::CameraChangeMode) final;
     void onCameraIsChanging() final;
@@ -115,6 +121,9 @@ public:
     double tileLodPitchThreshold = (60.0 / 180.0) * std::numbers::pi;
     double tileLodZoomShift = 0;
     TileLodMode tileLodMode = TileLodMode::Default;
+
+    // CFID: custom backdrop colour applied to the render-tree background.
+    std::optional<Color> backgroundColor;
 };
 
 // Forward declaration of this method is required for the MapProjection class

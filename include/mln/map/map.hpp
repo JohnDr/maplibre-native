@@ -5,6 +5,7 @@
 #include <mln/map/map_observer.hpp>
 #include <mln/map/map_options.hpp>
 #include <mln/map/mode.hpp>
+#include <mln/util/color.hpp>
 #include <mln/util/noncopyable.hpp>
 #include <mln/util/size.hpp>
 #include <mln/annotation/annotation.hpp>
@@ -147,6 +148,9 @@ public:
     /// is 4.
     void setPrefetchZoomDelta(uint8_t delta);
     uint8_t getPrefetchZoomDelta() const;
+
+    // CFID: backdrop colour (space) drawn behind the map - relevant when rendering the globe.
+    void setBackgroundColor(const Color& color);
 
     // Debug
     void setDebug(MapDebugOptions);

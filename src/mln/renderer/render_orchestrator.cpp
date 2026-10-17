@@ -429,6 +429,14 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
         addChanges(changes);
     }
 
+    // CFID: a custom backdrop colour overrides the render-tree background (clear colour) only
+    // on the globe, where the style background is drawn as a sphere mesh and would otherwise
+    // leave the space around it unpainted. On the flat map the style background (or its clear
+    // colour) is left untouched, so the map itself is unaffected.
+    if (updateParameters->backgroundColor && updateParameters->transformState.isGlobeRendering()) {
+        renderTreeParameters->backgroundColor = *updateParameters->backgroundColor;
+    }
+
     renderTreeParameters->loaded = updateParameters->styleLoaded && isLoaded();
     if (!isMapModeContinuous && !renderTreeParameters->loaded) {
         return nullptr;

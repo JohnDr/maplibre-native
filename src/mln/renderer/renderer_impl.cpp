@@ -369,7 +369,9 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
             std::optional<Color> color;
             if (parameters.debugOptions & MapDebugOptions::Overdraw) {
                 color = Color::black();
-            } else if (!backend.contextIsShared()) {
+            } else if (!backend.contextIsShared() ||
+                       (renderTreeParameters.transformParams.state.isGlobeRendering() &&
+                        renderTreeParameters.backgroundColor.a > 0.0f)) {
                 color = renderTreeParameters.backgroundColor;
             }
             parameters.renderPass = parameters.encoder->createRenderPass(

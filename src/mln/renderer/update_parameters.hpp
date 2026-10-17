@@ -8,9 +8,11 @@
 #include <mln/style/layer.hpp>
 #include <mln/text/glyph.hpp>
 #include <mln/util/chrono.hpp>
+#include <mln/util/color.hpp>
 #include <mln/util/immutable.hpp>
 
 #include <numbers>
+#include <optional>
 #include <vector>
 
 #include <mapbox/std/weak.hpp>
@@ -55,6 +57,9 @@ public:
     double tileLodPitchThreshold = (60.0 / 180.0) * std::numbers::pi;
     double tileLodZoomShift = 0;
     TileLodMode tileLodMode = TileLodMode::Default;
+
+    // CFID: custom backdrop colour (space) applied to the render-tree background.
+    std::optional<Color> backgroundColor;
 };
 
 } // namespace mln
