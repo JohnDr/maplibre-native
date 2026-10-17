@@ -193,6 +193,12 @@ public:
     // Position
     LatLng getLatLng(LatLng::WrapMode = LatLng::Unwrapped) const;
     double getCenterAltitude() const;
+    /// The ground elevation (metres above sea level) under the centre, i.e. the altitude the map centre sits at. With
+    /// 3D terrain this is the sampled DEM height; on a flat map it is 0.
+    double getElevation() const;
+    /// The camera's altitude above sea level, in metres: the centre altitude plus the vertical component of the camera's
+    /// distance to the centre. Mirrors GL JS `transform.getCameraAltitude()`.
+    double getCameraAltitude() const;
     double pixel_x() const;
     double pixel_y() const;
 
@@ -281,6 +287,9 @@ public:
     void moveLatLng(const LatLng&, const ScreenCoordinate&);
     void setLatLngZoom(const LatLng& latLng, double zoom);
     void setCenterAltitude(double alt_m);
+    /// Sets the centre's altitude to the ground elevation under it (metres above sea level). The camera is lifted with
+    /// it, so the map keeps its height above the terrain. Mirrors GL JS `transform.setElevation()`.
+    void setElevation(double elevation);
 
     void constrain(double& scale, double& x, double& y) const;
     bool constrainScreen(double& scale_, double& x_, double& y_) const;

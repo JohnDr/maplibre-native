@@ -599,6 +599,17 @@ double TransformState::getCenterAltitude() const {
     return z * Projection::getMetersPerPixelAtLatitude(getLatLng().latitude(), getZoom());
 }
 
+double TransformState::getElevation() const {
+    // The centre's altitude and the ground elevation under it are the same quantity: the map centre sits on the surface.
+    return getCenterAltitude();
+}
+
+double TransformState::getCameraAltitude() const {
+    return std::cos(getPitch()) * getCameraToCenterDistance() *
+               Projection::getMetersPerPixelAtLatitude(getLatLng().latitude(), getZoom()) +
+           getElevation();
+}
+
 double TransformState::pixel_x() const {
     const double center = (size.width - Projection::worldSize(scale)) / 2;
     return center + x;
@@ -1178,6 +1189,10 @@ void TransformState::setLatLngZoom(const LatLng& latLng, double zoom) {
 void TransformState::setCenterAltitude(double alt_m) {
     z = alt_m / Projection::getMetersPerPixelAtLatitude(getLatLng().latitude(), getZoom());
     requestMatricesUpdate = true;
+}
+
+void TransformState::setElevation(double elevation) {
+    setCenterAltitude(elevation);
 }
 
 void TransformState::setScalePoint(const double newScale, const ScreenCoordinate& point) {

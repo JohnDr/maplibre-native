@@ -529,6 +529,20 @@ double Transform::getFieldOfView() const {
     return state.getFieldOfView();
 }
 
+// MARK: - Elevation
+
+double Transform::getElevation() const {
+    return state.getElevation();
+}
+
+void Transform::setElevation(double elevation) {
+    state.setElevation(elevation);
+}
+
+double Transform::getCameraAltitude() const {
+    return state.getCameraAltitude();
+}
+
 // MARK: - North Orientation
 
 void Transform::setProjectionDefinition(const ProjectionDefinition& definition) {

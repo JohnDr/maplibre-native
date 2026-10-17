@@ -94,6 +94,14 @@ public:
     double getRoll() const;
     double getFieldOfView() const;
 
+    // Elevation (3D terrain)
+    /** The ground elevation (metres above sea level) under the centre; 0 on a flat map. */
+    double getElevation() const;
+    /** Sets the centre's altitude to the terrain elevation under it. */
+    void setElevation(double);
+    /** The camera's altitude above sea level, in metres. */
+    double getCameraAltitude() const;
+
     // North Orientation
     void setProjectionDefinition(const ProjectionDefinition&);
     void setNorthOrientation(NorthOrientation);
