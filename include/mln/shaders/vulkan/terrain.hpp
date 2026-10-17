@@ -56,7 +56,7 @@ layout(location = 0) out vec4 out_color;
 void main() {
     // Per-tile drape: this tile's own texture, shaded by the precomputed hillshade. Where no draping layer was
     // rendered (black, e.g. before imagery loads) fall back to a hypsometric tint so the relief is still visible.
-    const vec4 draped = texture(drapeSampler, vec2(v_uv.x, 1.0 - v_uv.y));
+    const vec4 draped = texture(drapeSampler, v_uv);
     const float shade = clamp(v_shade, 0.0, 1.0);
     const float lum = max(draped.r, max(draped.g, draped.b));
     const vec3 low = vec3(0.24, 0.42, 0.24);
