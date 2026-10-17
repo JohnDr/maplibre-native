@@ -10,6 +10,7 @@
 #include <mln/shaders/layer_ubo.hpp>
 #include <mln/util/mat4.hpp>
 #include <mln/util/containers.hpp>
+#include <mln/util/constants.hpp>
 #include <mln/util/convert.hpp>
 
 #if MLN_RENDER_BACKEND_METAL
@@ -79,6 +80,12 @@ shaders::ProjectionUBO LayerTweaker::toProjectionUBO(const ProjectionData& data)
             .depth_offset = static_cast<float>(data.depthOffset),
             .pad1 = 0,
             .pad2 = 0};
+}
+
+float LayerTweaker::globeExtrudeScale(const UnwrappedTileID& tileID, float zoom, double latitudeScale) {
+    return static_cast<float>(tileID.pixelsToTileUnits(1.0f, zoom) /
+                              (util::EXTENT * static_cast<double>(1ull << tileID.canonical.z)) * util::M2PI *
+                              latitudeScale);
 }
 
 #if MLN_UBO_CONSOLIDATION

@@ -161,6 +161,16 @@ vec3 projectToSphere(vec2 translatedPos, vec2 rawPos, ProjectionUBO projection) 
     return pos;
 }
 
+// Rotate a point on the unit sphere by `angles` (pitch, then bearing) about the tangent frame.
+vec3 globeRotateVector(vec3 vec, vec2 angles) {
+    vec3 axisRight = vec3(vec.z, 0.0, -vec.x);
+    vec3 axisUp = cross(axisRight, vec);
+    axisRight = normalize(axisRight);
+    axisUp = normalize(axisUp);
+    const vec2 t = tan(angles);
+    return normalize(vec + axisRight * t.x + axisUp * t.y);
+}
+
 float globeComputeClippingZ(vec3 spherePos, ProjectionUBO projection) {
     return 1.0 - (dot(spherePos, projection.clipping_plane.xyz) + projection.clipping_plane.w);
 }

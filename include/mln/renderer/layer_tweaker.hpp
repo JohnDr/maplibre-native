@@ -74,6 +74,9 @@ public:
 
     static shaders::ProjectionUBO toProjectionUBO(const ProjectionData&);
 
+    /// Radians per pixel on the sphere for a tile (GL JS `globeExtrudeScale`); `latitudeScale` is cos(center latitude).
+    static float globeExtrudeScale(const UnwrappedTileID&, float zoom, double latitudeScale);
+
 protected:
     /// Determine whether this tweaker should apply to the given drawable
     bool checkTweakDrawable(const gfx::Drawable&) const;
