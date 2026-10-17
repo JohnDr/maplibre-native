@@ -640,6 +640,8 @@ list(APPEND SRC_FILES
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/render_static_data.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/globe_depth_pass.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/globe_depth_pass.hpp
+    ${PROJECT_SOURCE_DIR}/src/mln/renderer/terrain_pass.cpp
+    ${PROJECT_SOURCE_DIR}/src/mln/renderer/terrain_pass.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/render_tile.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/render_tile.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/renderer/render_tree.hpp

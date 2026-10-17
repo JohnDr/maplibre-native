@@ -4,6 +4,9 @@
 #include <mln/storage/file_source.hpp>
 #include <mln/style/style_impl.hpp>
 #include <mln/style/projection_impl.hpp>
+#include <mln/style/terrain.hpp>
+#include <mln/style/source.hpp>
+#include <mln/style/sources/tile_source.hpp>
 #include <mln/util/exception.hpp>
 #include <mln/util/logging.hpp>
 #include <mln/util/traits.hpp>
@@ -144,6 +147,18 @@ void Map::Impl::onUpdate() {
                                .tileLodZoomShift = tileLodZoomShift,
                                .tileLodMode = tileLodMode,
                                .backgroundColor = backgroundColor};
+
+    // 3D terrain: hand the renderer the DEM tileset and exaggeration of the style's terrain source.
+    if (auto* terrain = style->impl->getTerrain(); terrain != nullptr && terrain->isEnabled()) {
+        if (auto* source = style->impl->getSource(terrain->getSource());
+            source != nullptr && source->getType() == style::SourceType::RasterDEM) {
+            const auto& urlOrTileset = static_cast<style::TileSource*>(source)->getURLOrTileset();
+            if (urlOrTileset.is<Tileset>()) {
+                params.terrainTileset = urlOrTileset.get<Tileset>();
+                params.terrainExaggeration = terrain->getExaggeration();
+            }
+        }
+    }
 
     rendererFrontend.update(std::make_shared<UpdateParameters>(std::move(params)));
 }

@@ -10,6 +10,7 @@
 #include <mln/util/chrono.hpp>
 #include <mln/util/color.hpp>
 #include <mln/util/immutable.hpp>
+#include <mln/util/tileset.hpp>
 
 #include <numbers>
 #include <optional>
@@ -60,6 +61,10 @@ public:
 
     // CFID: custom backdrop colour (space) applied to the render-tree background.
     std::optional<Color> backgroundColor;
+
+    // CFID: 3D terrain. When the tileset is set, the terrain pass fetches this raster-dem source and drapes it.
+    std::optional<Tileset> terrainTileset;
+    double terrainExaggeration = 1.0;
 };
 
 } // namespace mln

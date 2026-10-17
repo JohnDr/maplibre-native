@@ -486,6 +486,11 @@ enum {
 };
 
 enum {
+    idTerrainPosVertexAttribute,
+    terrainVertexAttributeCount
+};
+
+enum {
     idHeatmapPosVertexAttribute,
 
     // Data driven

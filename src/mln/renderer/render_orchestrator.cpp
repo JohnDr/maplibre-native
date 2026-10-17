@@ -1000,6 +1000,7 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
     addChanges(changes);
 
     globeDepthPass.update(shaders, context, state, *updateParameters, has3D);
+    terrainPass.update(shaders, context, state, *updateParameters);
 }
 
 void RenderOrchestrator::processChanges() {

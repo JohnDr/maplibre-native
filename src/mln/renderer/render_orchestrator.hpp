@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mln/renderer/globe_depth_pass.hpp>
+#include <mln/renderer/terrain_pass.hpp>
 #include <mln/renderer/layer_group.hpp>
 #include <mln/actor/scheduler.hpp>
 #include <mln/renderer/renderer.hpp>
@@ -110,6 +111,8 @@ public:
     void updateLayerIndex(LayerGroupBasePtr, int32_t newIndex);
 
     LayerGroupBase* getGlobeDepthLayerGroup() const { return globeDepthPass.getLayerGroup(); }
+
+    LayerGroupBase* getTerrainLayerGroup() const { return terrainPass.getLayerGroup(); }
 
     template <typename Func /* void(LayerGroupBase&) */>
     void visitLayerGroups(Func f) {
@@ -250,6 +253,7 @@ private:
     std::vector<RenderTargetPtr> renderTargets;
     RenderItem::DebugLayerGroupMap debugLayerGroups;
     GlobeDepthPass globeDepthPass;
+    TerrainPass terrainPass;
 };
 
 } // namespace mln

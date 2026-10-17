@@ -36,6 +36,9 @@ public:
     /// Whether any DEM tile has been loaded.
     bool hasData() const;
 
+    /// The DEM data for a tile, requesting it when necessary. Null until it has loaded.
+    std::shared_ptr<DEMData> getTileData(const CanonicalTileID& id) { return getDEMData(id); }
+
 protected:
     /// The DEM data for a tile, requesting it when necessary. Overridable so tests can inject data.
     virtual std::shared_ptr<DEMData> getDEMData(const CanonicalTileID&);

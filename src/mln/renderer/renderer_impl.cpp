@@ -293,6 +293,9 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
         if (auto* globeDepth = orchestrator.getGlobeDepthLayerGroup()) {
             globeDepth->upload(*uploadPass);
         }
+        if (auto* terrain = orchestrator.getTerrainLayerGroup()) {
+            terrain->upload(*uploadPass);
+        }
 
         // Give the render targets a chance to upload
         orchestrator.visitRenderTargets([&](RenderTarget& renderTarget) { renderTarget.upload(*uploadPass); });
@@ -444,6 +447,11 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
             if (item.hasRenderPass(parameters.pass)) {
                 item.render(parameters);
             }
+        }
+
+        // Terrain is drawn last, over the flat map, so the elevated surface is visible (draping lands later).
+        if (auto* terrain = orchestrator.getTerrainLayerGroup()) {
+            terrain->render(orchestrator, parameters);
         }
     };
 
