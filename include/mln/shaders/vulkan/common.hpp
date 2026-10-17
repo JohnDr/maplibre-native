@@ -207,6 +207,21 @@ vec4 projectTile(vec2 pos, vec2 rawPos, ProjectionUBO projection) {
     return interpolateProjection(pos, projectToSphere(pos, rawPos, projection), 0.0, projection);
 }
 
+// Keeps the matrix Z, for geometry that needs the depth buffer (3D layers).
+vec4 interpolateProjectionFor3D(vec2 posInTile, vec3 spherePos, float elevation, ProjectionUBO projection) {
+    const vec3 elevatedPos = spherePos * (1.0 + elevation / GLOBE_RADIUS);
+    const vec4 globePosition = projection.matrix * vec4(elevatedPos, 1.0);
+    if (projection.projection_transition > 0.999) {
+        return globePosition;
+    }
+    const vec4 fallbackPosition = projection.fallback_matrix * vec4(posInTile, elevation, 1.0);
+    return mix(fallbackPosition, globePosition, projection.projection_transition);
+}
+
+vec4 projectTileFor3D(vec2 pos, float elevation, ProjectionUBO projection) {
+    return interpolateProjectionFor3D(pos, projectToSphere(pos, pos, projection), elevation, projection);
+}
+
 #else
 
 vec4 projectTile(vec2 pos, ProjectionUBO projection) {
@@ -220,6 +235,10 @@ vec4 projectTile(vec2 pos, vec2 rawPos, ProjectionUBO projection) {
         result.z = -10000000.0;
     }
     return result;
+}
+
+vec4 projectTileFor3D(vec2 pos, float elevation, ProjectionUBO projection) {
+    return projection.matrix * vec4(pos, elevation, 1.0);
 }
 
 #endif

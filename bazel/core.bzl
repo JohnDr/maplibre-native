@@ -231,6 +231,8 @@ MLN_CORE_SOURCE = [
     "src/mln/renderer/cross_faded_property_evaluator.cpp",
     "src/mln/renderer/cross_faded_property_evaluator.hpp",
     "src/mln/renderer/data_driven_property_evaluator.hpp",
+    "src/mln/renderer/globe_depth_pass.cpp",
+    "src/mln/renderer/globe_depth_pass.hpp",
     "src/mln/renderer/globe_tile_mesh.hpp",
     "src/mln/renderer/group_by_layout.cpp",
     "src/mln/renderer/group_by_layout.hpp",

@@ -4,6 +4,7 @@
 #include <mln/renderer/paint_property_binder.hpp>
 #include <mln/renderer/render_light.hpp>
 #include <mln/tile/geometry_tile_data.hpp>
+#include <mln/util/subdivision_granularity.hpp>
 #include <mln/gfx/vertex_buffer.hpp>
 #include <mln/gfx/index_buffer.hpp>
 #include <mln/shaders/segment.hpp>
@@ -25,6 +26,8 @@ using FillExtrusionLayoutVertex = gfx::Vertex<TypeList<attributes::pos, attribut
 
 class FillExtrusionBucket final : public Bucket {
 public:
+    void setSubdivisionGranularity(const SubdivisionGranularitySetting& value) { subdivisionGranularity = value; }
+
     ~FillExtrusionBucket() override;
     using PossiblyEvaluatedPaintProperties = style::FillExtrusionPaintProperties::PossiblyEvaluated;
     using PossiblyEvaluatedLayoutProperties = style::FillExtrusionLayoutProperties::PossiblyEvaluated;
@@ -97,6 +100,7 @@ public:
     TriangleIndexVector& triangles = *sharedTriangles;
 
     SegmentVector triangleSegments;
+    SubdivisionGranularitySetting subdivisionGranularity;
     SegmentVector instanceSegments;
 
     std::unordered_map<std::string, FillExtrusionBinders> paintPropertyBinders;

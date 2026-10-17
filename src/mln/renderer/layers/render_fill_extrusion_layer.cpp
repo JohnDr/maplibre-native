@@ -103,7 +103,7 @@ bool RenderFillExtrusionLayer::queryIntersectsFeature(const GeometryCoordinates&
 
 void RenderFillExtrusionLayer::update(gfx::ShaderRegistry& shaders,
                                       gfx::Context& context,
-                                      const TransformState&,
+                                      const TransformState& state,
                                       const std::shared_ptr<UpdateParameters>&,
                                       [[maybe_unused]] const PaintParameters& paintParameters,
                                       const RenderTree&,
@@ -126,6 +126,8 @@ void RenderFillExtrusionLayer::update(gfx::ShaderRegistry& shaders,
         layerTweaker = std::make_shared<FillExtrusionLayerTweaker>(getID(), evaluatedProperties);
         layerGroup->addLayerTweaker(layerTweaker);
     }
+
+    updateProjectionVariant(state);
 
     if (!fillExtrusionGroup) {
         fillExtrusionGroup = shaders.getShaderGroup("FillExtrusionShader");
@@ -245,7 +247,7 @@ void RenderFillExtrusionLayer::update(gfx::ShaderRegistry& shaders,
             binders, evaluated, propertiesAsUniforms, idFillExtrusionBaseVertexAttribute);
 
         const auto shader = std::static_pointer_cast<gfx::ShaderProgramBase>(
-            shaderGroup->getOrCreateShader(context, propertiesAsUniforms));
+            shaderGroup->getOrCreateShader(context, propertiesAsUniforms, "a_pos", projectionVariant));
         if (!shader) {
             continue;
         }
@@ -269,7 +271,7 @@ void RenderFillExtrusionLayer::update(gfx::ShaderRegistry& shaders,
             binders, evaluated, instancePropertiesAsUniforms, idFillExtrusionBaseVertexAttribute);
 
         const auto instancedShader = std::static_pointer_cast<gfx::ShaderProgramBase>(
-            instancedShaderGroup->getOrCreateShader(context, instancePropertiesAsUniforms));
+            instancedShaderGroup->getOrCreateShader(context, instancePropertiesAsUniforms, "a_pos", projectionVariant));
         if (!instancedShader) {
             continue;
         }

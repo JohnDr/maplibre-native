@@ -7,6 +7,7 @@
 #include <mln/util/mat4.hpp>
 
 #include <mln/gfx/drawable.hpp>
+#include <mln/gfx/projection_variant.hpp>
 #include <mln/renderer/layer_group.hpp>
 #include <mln/renderer/change_request.hpp>
 #include <mln/util/tiny_unordered_map.hpp>
@@ -189,6 +190,9 @@ public:
     /// Remove all the drawables for tiles
     virtual std::size_t removeAllDrawables();
 
+    /// Switch to the projection the transform renders with; drops drawables and returns true if it changed.
+    bool updateProjectionVariant(const TransformState&);
+
     using Dependency = style::expression::Dependency;
     Dependency getStyleDependencies() const { return styleDependencies; }
 
@@ -317,6 +321,8 @@ protected:
 
     // Current renderable status as specified by the markLayerRenderable event
     bool isRenderable{false};
+
+    gfx::ProjectionVariant projectionVariant = gfx::ProjectionVariant::Mercator;
 
     struct Stats {
         size_t propertyEvaluations = 0;
