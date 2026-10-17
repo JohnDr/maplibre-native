@@ -5,6 +5,7 @@
 #include <mln/storage/response.hpp>
 #include <mln/style/image_impl.hpp>
 #include <mln/style/projection.hpp>
+#include <mln/style/terrain.hpp>
 #include <mln/style/layer_impl.hpp>
 #include <mln/style/layers/background_layer.hpp>
 #include <mln/style/layers/circle_layer.hpp>
@@ -34,10 +35,12 @@ Style::Impl::Impl(std::shared_ptr<FileSource> fileSource_, float pixelRatio, con
       spriteLoader(std::make_unique<SpriteLoader>(pixelRatio, threadPool_)),
       light(std::make_unique<Light>()),
       projection(std::make_unique<Projection>()),
+      terrain(std::make_unique<Terrain>()),
       observer(&nullObserver) {
     spriteLoader->setObserver(this);
     light->setObserver(this);
     projection->setObserver(this);
+    terrain->setObserver(this);
 }
 
 Style::Impl::~Impl() = default;
@@ -126,6 +129,7 @@ void Style::Impl::parse(const std::string& json_) {
 
     setLight(std::make_unique<Light>(parser.light));
     setProjection(std::make_unique<Projection>(parser.projection));
+    setTerrain(std::make_unique<Terrain>(parser.terrain));
 
     if (fileSource) {
         if (parser.sprites.empty()) {
@@ -262,6 +266,16 @@ void Style::Impl::setProjection(std::unique_ptr<Projection> projection_) {
 
 Projection* Style::Impl::getProjection() const {
     return projection.get();
+}
+
+void Style::Impl::setTerrain(std::unique_ptr<Terrain> terrain_) {
+    terrain = std::move(terrain_);
+    terrain->setObserver(this);
+    onTerrainChanged(*terrain);
+}
+
+Terrain* Style::Impl::getTerrain() const {
+    return terrain.get();
 }
 
 std::string Style::Impl::getName() const {
@@ -438,6 +452,10 @@ void Style::Impl::onLightChanged(const Light&) {
 }
 
 void Style::Impl::onProjectionChanged(const Projection&) {
+    observer->onUpdate();
+}
+
+void Style::Impl::onTerrainChanged(const Terrain&) {
     observer->onUpdate();
 }
 

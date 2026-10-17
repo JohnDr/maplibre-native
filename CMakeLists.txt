@@ -308,6 +308,7 @@ list(APPEND INCLUDE_FILES
     ${PROJECT_SOURCE_DIR}/include/mln/style/conversion/layer.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/conversion/light.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/conversion/projection.hpp
+    ${PROJECT_SOURCE_DIR}/include/mln/style/conversion/terrain.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/conversion/position.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/conversion/property_value.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/conversion/rotation.hpp
@@ -380,6 +381,7 @@ list(APPEND INCLUDE_FILES
     ${PROJECT_SOURCE_DIR}/include/mln/style/property_expression.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/property_value.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/rotation.hpp
+    ${PROJECT_SOURCE_DIR}/include/mln/style/terrain.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/source.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/sources/custom_geometry_source.hpp
     ${PROJECT_SOURCE_DIR}/include/mln/style/sources/custom_vector_source.hpp
@@ -708,6 +710,7 @@ list(APPEND SRC_FILES
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/layer.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/light.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/projection.cpp
+    ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/terrain.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/position.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/property_value.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/conversion/hillshade_conversions.cpp
@@ -829,6 +832,9 @@ list(APPEND SRC_FILES
     ${PROJECT_SOURCE_DIR}/src/mln/style/projection.cpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/projection_impl.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/projection_observer.hpp
+    ${PROJECT_SOURCE_DIR}/src/mln/style/terrain.cpp
+    ${PROJECT_SOURCE_DIR}/src/mln/style/terrain_impl.hpp
+    ${PROJECT_SOURCE_DIR}/src/mln/style/terrain_observer.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/observer.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/paint_property.hpp
     ${PROJECT_SOURCE_DIR}/src/mln/style/parser.cpp

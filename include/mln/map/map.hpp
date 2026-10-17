@@ -121,6 +121,13 @@ public:
     void setProjectionType(ProjectionType);
     ProjectionType getProjectionType() const;
 
+    // Terrain. The elevation of a `raster-dem` source is draped over the map as a 3D surface.
+    void setTerrain(const std::string& sourceId, double exaggeration = 1.0);
+    void clearTerrain();
+    bool hasTerrain() const;
+    std::string getTerrainSource() const;
+    double getTerrainExaggeration() const;
+
     // Projection
     ScreenCoordinate pixelForLatLng(const LatLng&) const;
     LatLng latLngForPixel(const ScreenCoordinate&) const;

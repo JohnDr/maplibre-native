@@ -7,6 +7,7 @@
 #include <mln/math/angles.hpp>
 #include <mln/style/projection.hpp>
 #include <mln/style/projection_definition.hpp>
+#include <mln/style/terrain.hpp>
 #include <mln/style/style_impl.hpp>
 #include <mln/math/log2.hpp>
 #include <mln/renderer/renderer_frontend.hpp>
@@ -26,6 +27,7 @@
 #include <mln/util/action_journal.hpp>
 
 #include <utility>
+#include <stdexcept>
 
 namespace mln {
 
@@ -439,6 +441,51 @@ void Map::setProjectionType(ProjectionType type) {
 
 ProjectionType Map::getProjectionType() const {
     return impl->transform.getProjectionType();
+}
+
+// MARK: - Terrain
+
+void Map::setTerrain(const std::string& sourceId, double exaggeration) {
+    if (!impl->style) {
+        throw std::runtime_error("Terrain requires a style to be loaded");
+    }
+    auto* source = impl->style->getSource(sourceId);
+    if (!source) {
+        throw std::runtime_error("Terrain source '" + sourceId + "' not found in style");
+    }
+    if (source->getType() != style::SourceType::RasterDEM) {
+        throw std::runtime_error("Terrain source '" + sourceId + "' must be a raster-dem source");
+    }
+    auto terrain = std::make_unique<style::Terrain>();
+    terrain->setSource(sourceId);
+    terrain->setExaggeration(exaggeration);
+    impl->style->impl->setTerrain(std::move(terrain));
+    impl->onUpdate();
+}
+
+void Map::clearTerrain() {
+    if (impl->style) {
+        impl->style->impl->setTerrain(std::make_unique<style::Terrain>());
+    }
+    impl->onUpdate();
+}
+
+bool Map::hasTerrain() const {
+    return impl->style && impl->style->getTerrain() && impl->style->getTerrain()->isEnabled();
+}
+
+std::string Map::getTerrainSource() const {
+    if (auto* terrain = impl->style ? impl->style->getTerrain() : nullptr) {
+        return terrain->getSource();
+    }
+    return {};
+}
+
+double Map::getTerrainExaggeration() const {
+    if (auto* terrain = impl->style ? impl->style->getTerrain() : nullptr) {
+        return terrain->getExaggeration();
+    }
+    return style::Terrain::getDefaultExaggeration();
 }
 
 // MARK: - Projection

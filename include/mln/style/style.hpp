@@ -19,6 +19,7 @@ namespace style {
 
 class Light;
 class Projection;
+class Terrain;
 class Source;
 class Layer;
 
@@ -52,6 +53,12 @@ public:
     const Projection* getProjection() const;
 
     void setProjection(std::unique_ptr<Projection>);
+
+    // Terrain
+    Terrain* getTerrain();
+    const Terrain* getTerrain() const;
+
+    void setTerrain(std::unique_ptr<Terrain>);
 
     // Images
     std::optional<Image> getImage(const std::string&) const;
