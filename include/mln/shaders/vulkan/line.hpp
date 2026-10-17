@@ -75,6 +75,10 @@ layout(std140, set = LAYER_SET_INDEX, binding = idLineDrawableUBO) readonly buff
     LineDrawableUBO drawable_ubo[];
 } drawableVector;
 
+layout(std140, set = LAYER_SET_INDEX, binding = idProjectionUBO) readonly buffer ProjectionUBOVector {
+    ProjectionUBO projection_ubo[];
+} projectionVector;
+
 layout(set = LAYER_SET_INDEX, binding = idLineEvaluatedPropsUBO) uniform LineEvaluatedPropsUBO {
     vec4 color;
     float blur;
@@ -169,8 +173,8 @@ void main() {
     mediump float t = 1.0 - abs(u);
     mediump vec2 offset2 = offset * a_extrude * LINE_NORMAL_SCALE * frag_normal.y * mat2(t, -u, u, t);
 
-    vec4 projected_extrude = drawable.matrix * vec4(dist / drawable.ratio, 0.0, 0.0);
-    gl_Position = drawable.matrix * vec4(pos + offset2 / drawable.ratio, 0.0, 1.0) + projected_extrude;
+    vec4 projected_extrude = projectionVector.projection_ubo[constant.ubo_index].fallback_matrix * vec4(dist / drawable.ratio, 0.0, 0.0);
+    gl_Position = projectTile(pos + offset2 / drawable.ratio, pos + offset2 / drawable.ratio, projectionVector.projection_ubo[constant.ubo_index]) + projected_extrude;
     applySurfaceTransform();
 
     // calculate how much the perspective view squishes or stretches the extrude
@@ -310,6 +314,10 @@ layout(std140, set = LAYER_SET_INDEX, binding = idLineDrawableUBO) readonly buff
     LineGradientDrawableUBO drawable_ubo[];
 } drawableVector;
 
+layout(std140, set = LAYER_SET_INDEX, binding = idProjectionUBO) readonly buffer ProjectionUBOVector {
+    ProjectionUBO projection_ubo[];
+} projectionVector;
+
 layout(set = LAYER_SET_INDEX, binding = idLineEvaluatedPropsUBO) uniform LineEvaluatedPropsUBO {
     vec4 color;
     float blur;
@@ -398,8 +406,8 @@ void main() {
     mediump float t = 1.0 - abs(u);
     mediump vec2 offset2 = offset * a_extrude * LINE_NORMAL_SCALE * frag_normal.y * mat2(t, -u, u, t);
 
-    vec4 projected_extrude = drawable.matrix * vec4(dist / drawable.ratio, 0.0, 0.0);
-    gl_Position = drawable.matrix * vec4(pos + offset2 / drawable.ratio, 0.0, 1.0) + projected_extrude;
+    vec4 projected_extrude = projectionVector.projection_ubo[constant.ubo_index].fallback_matrix * vec4(dist / drawable.ratio, 0.0, 0.0);
+    gl_Position = projectTile(pos + offset2 / drawable.ratio, pos + offset2 / drawable.ratio, projectionVector.projection_ubo[constant.ubo_index]) + projected_extrude;
     applySurfaceTransform();
 
     // calculate how much the perspective view squishes or stretches the extrude
@@ -544,6 +552,10 @@ layout(std140, set = LAYER_SET_INDEX, binding = idLineDrawableUBO) readonly buff
     LinePatternDrawableUBO drawable_ubo[];
 } drawableVector;
 
+layout(std140, set = LAYER_SET_INDEX, binding = idProjectionUBO) readonly buffer ProjectionUBOVector {
+    ProjectionUBO projection_ubo[];
+} projectionVector;
+
 layout(set = LAYER_SET_INDEX, binding = idLineEvaluatedPropsUBO) uniform LineEvaluatedPropsUBO {
     vec4 color;
     float blur;
@@ -648,8 +660,8 @@ void main() {
     mediump float t = 1.0 - abs(u);
     mediump vec2 offset2 = offset * a_extrude * LINE_NORMAL_SCALE * frag_normal.y * mat2(t, -u, u, t);
 
-    vec4 projected_extrude = drawable.matrix * vec4(dist / drawable.ratio, 0.0, 0.0);
-    gl_Position = drawable.matrix * vec4(pos + offset2 / drawable.ratio, 0.0, 1.0) + projected_extrude;
+    vec4 projected_extrude = projectionVector.projection_ubo[constant.ubo_index].fallback_matrix * vec4(dist / drawable.ratio, 0.0, 0.0);
+    gl_Position = projectTile(pos + offset2 / drawable.ratio, pos + offset2 / drawable.ratio, projectionVector.projection_ubo[constant.ubo_index]) + projected_extrude;
     applySurfaceTransform();
 
     // calculate how much the perspective view squishes or stretches the extrude
@@ -865,6 +877,10 @@ layout(std140, set = LAYER_SET_INDEX, binding = idLineDrawableUBO) readonly buff
     LineSDFDrawableUBO drawable_ubo[];
 } drawableVector;
 
+layout(std140, set = LAYER_SET_INDEX, binding = idProjectionUBO) readonly buffer ProjectionUBOVector {
+    ProjectionUBO projection_ubo[];
+} projectionVector;
+
 layout(set = LAYER_SET_INDEX, binding = idLineEvaluatedPropsUBO) uniform LineEvaluatedPropsUBO {
     vec4 color;
     float blur;
@@ -974,8 +990,8 @@ void main() {
     mediump float t = 1.0 - abs(u);
     mediump vec2 offset2 = offset * a_extrude * LINE_NORMAL_SCALE * frag_normal.y * mat2(t, -u, u, t);
 
-    vec4 projected_extrude = drawable.matrix * vec4(dist / drawable.ratio, 0.0, 0.0);
-    gl_Position = drawable.matrix * vec4(pos + offset2 / drawable.ratio, 0.0, 1.0) + projected_extrude;
+    vec4 projected_extrude = projectionVector.projection_ubo[constant.ubo_index].fallback_matrix * vec4(dist / drawable.ratio, 0.0, 0.0);
+    gl_Position = projectTile(pos + offset2 / drawable.ratio, pos + offset2 / drawable.ratio, projectionVector.projection_ubo[constant.ubo_index]) + projected_extrude;
     applySurfaceTransform();
 
     // calculate how much the perspective view squishes or stretches the extrude
