@@ -251,6 +251,10 @@ private:
     LayerGroupMap layerGroupsByLayerIndex;
 
     std::vector<RenderTargetPtr> renderTargets;
+
+    // Offscreen target holding the map layers draped over the terrain.
+    RenderTargetPtr terrainDrapeTarget;
+    Size terrainDrapeTargetSize;
     RenderItem::DebugLayerGroupMap debugLayerGroups;
     GlobeDepthPass globeDepthPass;
     TerrainPass terrainPass;

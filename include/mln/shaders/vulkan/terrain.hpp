@@ -15,7 +15,7 @@ struct ShaderSource<BuiltIn::TerrainShader, gfx::Backend::Type::Vulkan> {
 
     static const std::array<AttributeInfo, 1> attributes;
     static constexpr std::array<AttributeInfo, 0> instanceAttributes{};
-    static const std::array<TextureInfo, 0> textures;
+    static const std::array<TextureInfo, 1> textures;
 
     static constexpr auto prelude = R"(
 )";
@@ -33,24 +33,30 @@ layout(std140, set = LAYER_SET_INDEX, binding = idProjectionUBO) readonly buffer
 } projectionVector;
 
 layout(location = 0) out float v_shade;
+layout(location = 1) out vec2 v_uv;
 
 void main() {
     gl_Position = projectTileFor3D(in_position.xy, in_position.z, projectionVector.projection_ubo[constant.ubo_index]);
     applySurfaceTransform();
     v_shade = in_position.w;
+    v_uv = gl_Position.xy / gl_Position.w * 0.5 + 0.5;
 }
 )";
 
     static constexpr auto fragment = R"(
 
 layout(location = 0) in float v_shade;
+layout(location = 1) in vec2 v_uv;
+
+layout(set = DRAWABLE_IMAGE_SET_INDEX, binding = 0) uniform sampler2D drapeSampler;
+
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    // A simple hypsometric-ish ramp: greener valleys, paler peaks, darkened by the precomputed shade.
-    const vec3 low = vec3(0.24, 0.42, 0.24);
-    const vec3 high = vec3(0.86, 0.83, 0.72);
-    out_color = vec4(mix(low, high, clamp(v_shade, 0.0, 1.0)), 1.0);
+    // Screen-space drape: the map is rendered to an offscreen texture and sampled at this fragment's screen position,
+    // then shaded by the precomputed hillshade.
+    const vec4 draped = texture(drapeSampler, vec2(v_uv.x, 1.0 - v_uv.y));
+    out_color = vec4(draped.rgb * clamp(v_shade, 0.0, 1.0), 1.0);
 }
 )";
 };

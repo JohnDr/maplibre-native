@@ -190,6 +190,9 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             builder->setDepthType(gfx::DepthMaskType::ReadWrite);
             builder->setCullFaceMode(gfx::CullFaceMode::disabled());
             builder->setVertexAttrId(shaders::idTerrainPosVertexAttribute);
+            if (drapeTexture) {
+                builder->setTexture(drapeTexture, shaders::idTerrainDrapeTexture);
+            }
         }
 
         auto mesh = buildTerrainMesh(*data, updateParameters.terrainExaggeration, metersPerPixel);

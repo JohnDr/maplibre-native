@@ -2,6 +2,7 @@
 
 #include <mln/renderer/layer_group.hpp>
 #include <mln/gfx/uniform_buffer.hpp>
+#include <mln/gfx/texture2d.hpp>
 #include <mln/shaders/shader_program_base.hpp>
 #include <mln/util/tileset.hpp>
 
@@ -37,10 +38,14 @@ public:
     /// Called when a DEM tile loads, so the map can schedule another frame.
     void setTileLoadedCallback(std::function<void()> callback) { onTileLoaded = std::move(callback); }
 
+    /// The offscreen texture holding the draped map layers, sampled by the terrain shader.
+    void setDrapeTexture(gfx::Texture2DPtr texture) { drapeTexture = std::move(texture); }
+
 private:
     TileLayerGroupPtr layerGroup;
     gfx::ShaderProgramBasePtr shader;
     gfx::UniformBufferPtr projectionUniformBuffer;
+    gfx::Texture2DPtr drapeTexture;
     std::unique_ptr<TerrainTileManager> terrain;
     std::optional<Tileset> tileset;
     std::function<void()> onTileLoaded;

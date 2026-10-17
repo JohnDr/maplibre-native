@@ -4,6 +4,7 @@
 #include <mln/layermanager/layer_manager.hpp>
 #include <mln/renderer/change_request.hpp>
 #include <mln/renderer/renderer_observer.hpp>
+#include <mln/renderer/render_target.hpp>
 #include <mln/renderer/render_source.hpp>
 #include <mln/renderer/render_layer.hpp>
 #include <mln/renderer/render_static_data.hpp>
@@ -1006,6 +1007,36 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
     addChanges(changes);
 
     globeDepthPass.update(shaders, context, state, *updateParameters, has3D);
+
+    // Terrain drape: render the map layers into an offscreen texture that the terrain samples.
+    const bool terrainEnabled = updateParameters->terrainTileset.has_value() &&
+                                !updateParameters->terrainTileset->tiles.empty();
+    if (terrainEnabled) {
+        const Size drapeSize = paintParameters.renderableSize;
+        if (!terrainDrapeTarget || terrainDrapeTargetSize != drapeSize) {
+            if (terrainDrapeTarget) {
+                removeRenderTarget(terrainDrapeTarget);
+            }
+            terrainDrapeTarget = context.createRenderTarget(drapeSize, gfx::TextureChannelDataType::UnsignedByte);
+            terrainDrapeTargetSize = drapeSize;
+            if (terrainDrapeTarget) {
+                addRenderTarget(terrainDrapeTarget);
+            }
+        }
+        if (terrainDrapeTarget) {
+            for (auto& [index, layerGroup] : layerGroupsByLayerIndex) {
+                if (layerGroup) {
+                    terrainDrapeTarget->addLayerGroup(layerGroup, /*replace=*/true);
+                }
+            }
+            terrainPass.setDrapeTexture(terrainDrapeTarget->getTexture());
+        }
+    } else if (terrainDrapeTarget) {
+        removeRenderTarget(terrainDrapeTarget);
+        terrainDrapeTarget.reset();
+        terrainPass.setDrapeTexture(nullptr);
+    }
+
     terrainPass.update(shaders, context, state, paintParameters, *updateParameters);
 }
 

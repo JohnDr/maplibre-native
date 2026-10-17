@@ -491,6 +491,11 @@ enum {
 };
 
 enum {
+    idTerrainDrapeTexture,
+    terrainTextureCount
+};
+
+enum {
     idHeatmapPosVertexAttribute,
 
     // Data driven
