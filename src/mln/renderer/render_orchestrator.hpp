@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mln/renderer/globe_depth_pass.hpp>
+#include <mln/renderer/sky_pass.hpp>
 #include <mln/renderer/terrain_pass.hpp>
 #include <mln/renderer/layer_group.hpp>
 #include <mln/actor/scheduler.hpp>
@@ -119,6 +120,7 @@ public:
     LayerGroupBase* getGlobeDepthLayerGroup() const { return globeDepthPass.getLayerGroup(); }
 
     LayerGroupBase* getTerrainLayerGroup() const { return terrainPass.getLayerGroup(); }
+    LayerGroupBase* getSkyLayerGroup() const { return skyPass.getLayerGroup(); }
 
     // Sampler of the terrain elevation (world pixels) at a tile centre, for symbol elevation.
     std::function<float(const UnwrappedTileID&)> getTerrainElevationFunction(const TransformState& state,
@@ -287,6 +289,7 @@ private:
     std::set<int32_t> drapeLayerIndices;
     RenderItem::DebugLayerGroupMap debugLayerGroups;
     GlobeDepthPass globeDepthPass;
+    SkyPass skyPass;
     TerrainPass terrainPass;
 };
 

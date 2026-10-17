@@ -99,6 +99,11 @@ enum {
 };
 
 enum {
+    idTerrainFogUBO = getEnumValue(drawableReservedUBOCount, layerUBOStartId),
+    terrainLayerUBOCount
+};
+
+enum {
     idCircleEvaluatedPropsUBO = getEnumValue(circleLayerSSBOCount, layerUBOStartId),
     circleLayerUBOCount
 };
@@ -483,6 +488,11 @@ enum {
 enum {
     idGlobeDepthPosVertexAttribute,
     globeDepthVertexAttributeCount
+};
+
+enum {
+    idSkyPosVertexAttribute,
+    skyVertexAttributeCount
 };
 
 enum {

@@ -51,6 +51,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/test/style/conversion/function.test.cpp
     ${PROJECT_SOURCE_DIR}/test/style/conversion/geojson_options.test.cpp
     ${PROJECT_SOURCE_DIR}/test/style/conversion/layer.test.cpp
+    ${PROJECT_SOURCE_DIR}/test/style/conversion/sky.test.cpp
     ${PROJECT_SOURCE_DIR}/test/style/conversion/light.test.cpp
     ${PROJECT_SOURCE_DIR}/test/style/conversion/padding.test.cpp
     ${PROJECT_SOURCE_DIR}/test/style/conversion/projection.test.cpp

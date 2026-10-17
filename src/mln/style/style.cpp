@@ -4,6 +4,7 @@
 #include <mln/style/light.hpp>
 #include <mln/style/projection.hpp>
 #include <mln/style/terrain.hpp>
+#include <mln/style/sky.hpp>
 #include <mln/style/source.hpp>
 #include <mln/style/style.hpp>
 #include <mln/style/style_impl.hpp>
@@ -87,6 +88,14 @@ Projection* Style::getProjection() {
 
 const Projection* Style::getProjection() const {
     return impl->getProjection();
+}
+
+std::optional<Sky> Style::getSky() const {
+    return impl->getSky();
+}
+
+void Style::setSky(std::optional<Sky> sky) {
+    impl->setSky(std::move(sky));
 }
 
 void Style::setTerrain(std::unique_ptr<Terrain> terrain) {

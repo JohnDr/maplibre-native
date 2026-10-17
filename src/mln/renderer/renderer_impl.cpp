@@ -294,6 +294,9 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
 
         // Give the layers a chance to upload
         orchestrator.visitLayerGroups([&](LayerGroupBase& layerGroup) { layerGroup.upload(*uploadPass); });
+        if (auto* sky = orchestrator.getSkyLayerGroup()) {
+            sky->upload(*uploadPass);
+        }
         if (auto* globeDepth = orchestrator.getGlobeDepthLayerGroup()) {
             globeDepth->upload(*uploadPass);
         }
@@ -437,6 +440,11 @@ void Renderer::Impl::render(const RenderTree& renderTree, const std::shared_ptr<
         parameters.pass = RenderPass::Translucent;
         parameters.depthRangeSize = 1 - (orchestrator.numLayerGroups() + 2) * PaintParameters::numSublayers *
                                             PaintParameters::depthEpsilon;
+
+        // The sky goes first, under everything (GL JS draws it before the layers).
+        if (auto* sky = orchestrator.getSkyLayerGroup()) {
+            sky->render(orchestrator, parameters);
+        }
 
         // The planet goes into the depth buffer first, so 3D geometry behind the horizon stays hidden.
         if (auto* globeDepth = orchestrator.getGlobeDepthLayerGroup()) {

@@ -6,6 +6,7 @@
 #include <mln/style/image_impl.hpp>
 #include <mln/style/projection.hpp>
 #include <mln/style/terrain.hpp>
+#include <mln/style/sky.hpp>
 #include <mln/style/layer_impl.hpp>
 #include <mln/style/layers/background_layer.hpp>
 #include <mln/style/layers/circle_layer.hpp>
@@ -130,6 +131,7 @@ void Style::Impl::parse(const std::string& json_) {
     setLight(std::make_unique<Light>(parser.light));
     setProjection(std::make_unique<Projection>(parser.projection));
     setTerrain(std::make_unique<Terrain>(parser.terrain));
+    setSky(parser.sky);
 
     if (fileSource) {
         if (parser.sprites.empty()) {
@@ -272,6 +274,18 @@ void Style::Impl::setTerrain(std::unique_ptr<Terrain> terrain_) {
     terrain = std::move(terrain_);
     terrain->setObserver(this);
     onTerrainChanged(*terrain);
+}
+
+void Style::Impl::setSky(std::optional<Sky> sky_) {
+    if (sky == sky_) {
+        return;
+    }
+    sky = std::move(sky_);
+    observer->onUpdate();
+}
+
+const std::optional<Sky>& Style::Impl::getSky() const {
+    return sky;
 }
 
 Terrain* Style::Impl::getTerrain() const {

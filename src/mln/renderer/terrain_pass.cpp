@@ -22,6 +22,7 @@
 #include <mln/util/projection.hpp>
 #include <mln/util/tile_cover.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 #include <unordered_set>
@@ -306,6 +307,38 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         }
         projectionUBOs.emplace_back(LayerTweaker::toProjectionUBO(pd));
     });
+
+    // Fog (GL JS terrain fog): the sky's fog colours and the depth range it blends over. Off without a sky, in the
+    // globe projection, and below pitch 60 (GL JS `calculateFogBlendOpacity`: 0 below 60, ramping to 1 at 70).
+    {
+        struct alignas(16) TerrainFogUBO {
+            std::array<float, 4> fogColor;
+            std::array<float, 4> horizonColor;
+            std::array<float, 4> params;
+            std::array<float, 4> depthRange;
+        };
+        static_assert(sizeof(TerrainFogUBO) == 4 * 16);
+        TerrainFogUBO fogUBO{};
+        fogUBO.params = {1.0f, 0.0f, 1.0f, 0.0f};
+        fogUBO.depthRange = {1.0f, 2.0f, 0.0f, 0.0f};
+        double nearDistance = 1.0;
+        double farDistance = 2.0;
+        if (updateParameters.sky && !globeShader && state.getFogDepthRange(nearDistance, farDistance)) {
+            const auto& sky = *updateParameters.sky;
+            const double pitchDegrees = state.getPitch() * 180.0 / std::numbers::pi;
+            const double opacity = pitchDegrees < 60.0 ? 0.0 : (pitchDegrees < 70.0 ? (pitchDegrees - 60.0) / 10.0 : 1.0);
+            fogUBO.fogColor = {sky.fogColor.r, sky.fogColor.g, sky.fogColor.b, sky.fogColor.a};
+            fogUBO.horizonColor = {sky.horizonColor.r, sky.horizonColor.g, sky.horizonColor.b, sky.horizonColor.a};
+            fogUBO.params = {sky.fogGroundBlend, static_cast<float>(opacity), sky.horizonFogBlend, 0.0f};
+            fogUBO.depthRange = {static_cast<float>(nearDistance), static_cast<float>(farDistance), 0.0f, 0.0f};
+        }
+        if (!fogUniformBuffer) {
+            fogUniformBuffer = context.createUniformBuffer(&fogUBO, sizeof(fogUBO), false, false);
+        } else {
+            fogUniformBuffer->update(&fogUBO, sizeof(fogUBO));
+        }
+        layerGroup->mutableUniformBuffers().set(shaders::idTerrainFogUBO, fogUniformBuffer);
+    }
 
     if (!projectionUBOs.empty()) {
         const std::size_t size = sizeof(shaders::ProjectionUBO) * projectionUBOs.size();

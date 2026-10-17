@@ -1019,6 +1019,8 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
 
     globeDepthPass.update(shaders, context, state, *updateParameters, has3D);
 
+    skyPass.update(shaders, context, state, paintParameters, *updateParameters);
+
     terrainPass.update(shaders, context, state, paintParameters, *updateParameters);
 
     // Terrain drape: one tile-sized offscreen target per terrain tile, holding the draped map layers.

@@ -6,6 +6,7 @@
 #include <mln/style/light.hpp>
 #include <mln/style/projection.hpp>
 #include <mln/style/terrain.hpp>
+#include <mln/style/sky.hpp>
 
 #include <mln/text/glyph.hpp>
 
@@ -43,6 +44,7 @@ public:
     Light light;
     Projection projection;
     Terrain terrain;
+    std::optional<Sky> sky;
 
     std::string name;
     LatLng latLng;
@@ -60,6 +62,7 @@ private:
     void parseLight(const JSValue&);
     void parseProjection(const JSValue&);
     void parseTerrain(const JSValue&);
+    void parseSky(const JSValue&);
     void parseSources(const JSValue&);
     void parseSprites(const JSValue&);
     void parseLayers(const JSValue&);

@@ -161,6 +161,10 @@ public:
     // Matrix
     void matrixFor(mat4&, const UnwrappedTileID&) const;
     void getProjMatrix(mat4& matrix, uint16_t nearZ = 1, bool aligned = false) const;
+
+    /// The eye-space depth range used for the fog (GL JS `_fogMatrix`): from the camera-to-sea-level distance (near)
+    /// to the far clipping plane. False when the viewport is empty.
+    bool getFogDepthRange(double& nearDistance, double& farDistance) const;
     const ProjectionBase& getProjection() const { return *projection; }
     ProjectionData getProjectionData(const UnwrappedTileID&, const mat4& projMatrix) const;
     ProjectionData getProjectionData(const UnwrappedTileID&) const;

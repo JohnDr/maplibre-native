@@ -177,6 +177,27 @@ ProjectionData TransformState::getProjectionDataForMatrix(const UnwrappedTileID&
     return projection->getProjectionData(*this, tileID, mercatorMatrix);
 }
 
+bool TransformState::getFogDepthRange(double& nearDistance, double& farDistance) const {
+    if (size.isEmpty()) {
+        return false;
+    }
+    const double cameraToCenterDistance = getCameraToCenterDistance();
+    const ScreenCoordinate offset = getCenterOffset();
+    const double limitedPitch = util::clamp(getPitch(), 0.0, maxMercatorHorizonAngle);
+
+    // Far plane: as in getProjMatrix.
+    const double seaLevelDistance = cameraToCenterDistance + std::abs(z) / std::cos(limitedPitch);
+    const double tanFovAboveCenter = (0.5 + (offset.y - frustumOffset.top()) / size.height) * 2.0 *
+                                     std::tan(fov / 2.0) *
+                                     (std::abs(std::cos(roll)) + std::abs(std::sin(roll)) * size.width / size.height);
+    const double tanMultiple = util::clamp(tanFovAboveCenter * std::tan(limitedPitch), 0.0, 0.99);
+    farDistance = seaLevelDistance / (1 - tanMultiple) * 1.01;
+
+    // Near plane: GL JS `cameraToSeaLevelDistance` of the fog matrix (mercator_transform.ts `_calcMatrices`).
+    nearDistance = std::max(cameraToCenterDistance / 2.0, cameraToCenterDistance + z / std::cos(limitedPitch));
+    return true;
+}
+
 void TransformState::getProjMatrix(mat4& projMatrix, uint16_t nearZ, bool aligned) const {
     if (size.isEmpty()) {
         return;

@@ -3,10 +3,12 @@
 #include <mln/actor/scheduler.hpp>
 #include <mln/map/camera.hpp>
 #include <mln/style/image.hpp>
+#include <mln/style/sky.hpp>
 #include <mln/style/transition_options.hpp>
 #include <mln/util/geo.hpp>
 #include <mln/util/immutable.hpp>
 
+#include <optional>
 #include <string>
 #include <vector>
 #include <memory>
@@ -59,6 +61,10 @@ public:
     const Terrain* getTerrain() const;
 
     void setTerrain(std::unique_ptr<Terrain>);
+
+    // Sky (style-spec `sky`): none unless the style (or the application) sets one.
+    std::optional<Sky> getSky() const;
+    void setSky(std::optional<Sky>);
 
     // Images
     std::optional<Image> getImage(const std::string&) const;

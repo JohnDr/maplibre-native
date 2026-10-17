@@ -93,6 +93,8 @@ public:
     Projection* getProjection() const;
 
     void setTerrain(std::unique_ptr<Terrain>);
+    void setSky(std::optional<Sky>);
+    const std::optional<Sky>& getSky() const;
     Terrain* getTerrain() const;
 
     std::optional<Immutable<style::Image::Impl>> getImage(const std::string&) const;
@@ -133,6 +135,7 @@ private:
     std::unique_ptr<Light> light;
     std::unique_ptr<Projection> projection;
     std::unique_ptr<Terrain> terrain;
+    std::optional<Sky> sky;
     std::unordered_map<std::string, bool> spritesLoadingStatus;
 
     // Defaults

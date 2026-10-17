@@ -58,6 +58,7 @@ public:
 private:
     TileLayerGroupPtr layerGroup;
     gfx::ShaderProgramBasePtr shader;
+    gfx::UniformBufferPtr fogUniformBuffer;
     gfx::UniformBufferPtr projectionUniformBuffer;
     std::vector<OverscaledTileID> cover;
     bool globeShader = false;

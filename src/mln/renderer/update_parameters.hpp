@@ -10,6 +10,7 @@
 #include <mln/util/chrono.hpp>
 #include <mln/util/color.hpp>
 #include <mln/util/immutable.hpp>
+#include <mln/style/sky.hpp>
 #include <mln/util/tileset.hpp>
 
 #include <numbers>
@@ -65,6 +66,9 @@ public:
     // CFID: 3D terrain. When the tileset is set, the terrain pass fetches this raster-dem source and drapes it.
     std::optional<Tileset> terrainTileset = std::nullopt;
     double terrainExaggeration = 1.0;
+
+    // The style's `sky` (none when the style has no sky).
+    std::optional<style::Sky> sky = std::nullopt;
 };
 
 } // namespace mln
