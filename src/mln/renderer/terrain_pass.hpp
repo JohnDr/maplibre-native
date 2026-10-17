@@ -56,6 +56,7 @@ private:
     gfx::ShaderProgramBasePtr shader;
     gfx::UniformBufferPtr projectionUniformBuffer;
     std::vector<OverscaledTileID> cover;
+    bool globeShader = false;
     std::unique_ptr<TerrainTileManager> terrain;
     std::optional<Tileset> tileset;
     std::function<void()> onTileLoaded;

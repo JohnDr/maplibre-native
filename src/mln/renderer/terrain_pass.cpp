@@ -132,8 +132,16 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         builtZoom = -1;
     }
 
-    if (!shader) {
-        shader = context.getGenericShader(shaders, std::string(TerrainShaderName), gfx::ProjectionVariant::Mercator);
+    const bool globe = state.isGlobeRendering();
+    if (!shader || globe != globeShader) {
+        globeShader = globe;
+        shader = context.getGenericShader(shaders,
+                                          std::string(TerrainShaderName),
+                                          globe ? gfx::ProjectionVariant::Globe : gfx::ProjectionVariant::Mercator);
+        if (layerGroup) {
+            layerGroup->clearDrawables();
+        }
+        builtZoom = -1;
     }
     if (!shader) {
         return;
@@ -222,12 +230,14 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         drawable.setUBOIndex(uboIndex++);
         const auto tileID = drawable.getTileID()->toUnwrapped();
         auto pd = paintParameters.projectionDataForTile(tileID);
-        mat4 tileMatrix;
-        paintParameters.state.matrixFor(tileMatrix, tileID);
-        mat4 composed;
-        matrix::multiply(composed, paintParameters.transformParams.projMatrix, tileMatrix);
-        pd.mainMatrix = composed;
-        pd.fallbackMatrix = composed;
+        if (!globeShader) {
+            mat4 tileMatrix;
+            paintParameters.state.matrixFor(tileMatrix, tileID);
+            mat4 composed;
+            matrix::multiply(composed, paintParameters.transformParams.projMatrix, tileMatrix);
+            pd.mainMatrix = composed;
+            pd.fallbackMatrix = composed;
+        }
         projectionUBOs.emplace_back(LayerTweaker::toProjectionUBO(pd));
     });
 
