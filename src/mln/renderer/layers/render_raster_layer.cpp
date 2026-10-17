@@ -204,13 +204,11 @@ void RenderRasterLayer::update(gfx::ShaderRegistry& shaders,
             const bool globe = projectionVariant == gfx::ProjectionVariant::Globe && tileID;
             const bool shared = !globe && !bucket.sharedVertices->empty() && !bucket.sharedTriangles->empty() &&
                                 !bucket.segments.empty();
-            std::optional<GlobeTileMesh<RasterLayoutVertex, decltype(&RasterBucket::layoutVertex)>> globeMesh;
-            if (globe) {
-                globeMesh.emplace(tileID->canonical, &RasterBucket::layoutVertex);
-            }
-            const auto& vertices = globe ? globeMesh->vertices : shared ? bucket.sharedVertices : staticDataVertices;
-            const auto& indices = globe ? globeMesh->indices : shared ? bucket.sharedTriangles : staticDataIndices;
-            const auto* segments = globe ? &globeMesh->segments : shared ? &bucket.segments : staticDataSegments.get();
+            const GlobeTileMesh<RasterLayoutVertex, decltype(&RasterBucket::layoutVertex)>* globeMesh =
+                globe ? &globeMeshes.get(tileID->canonical, bucket.mask, &RasterBucket::layoutVertex) : nullptr;
+            const auto& vertices = globeMesh ? globeMesh->vertices : shared ? bucket.sharedVertices : staticDataVertices;
+            const auto& indices = globeMesh ? globeMesh->indices : shared ? bucket.sharedTriangles : staticDataIndices;
+            const auto* segments = globeMesh ? &globeMesh->segments : shared ? &bucket.segments : staticDataSegments.get();
 
             gfx::VertexAttributeArrayPtr bucketAttrs;
             auto& vertexAttrs = (shared || globe) ? bucketAttrs : staticAttrs;

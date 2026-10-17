@@ -6,6 +6,7 @@
 #include <mln/style/layers/raster_layer_properties.hpp>
 #include <mln/gfx/context.hpp>
 #include <mln/gfx/projection_variant.hpp>
+#include <mln/renderer/globe_tile_mesh.hpp>
 
 namespace mln {
 
@@ -53,6 +54,8 @@ private:
     const ImageSourceRenderData* imageData = nullptr;
 
     gfx::ProjectionVariant projectionVariant = gfx::ProjectionVariant::Mercator;
+
+    GlobeTileMeshCache<RasterLayoutVertex, decltype(&RasterBucket::layoutVertex)> globeMeshes;
 
     gfx::ShaderProgramBasePtr rasterShader;
     LayerGroupPtr imageLayerGroup;

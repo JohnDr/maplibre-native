@@ -6,6 +6,7 @@
 #include <mln/style/layers/hillshade_layer_properties.hpp>
 #include <mln/tile/tile_id.hpp>
 #include <mln/gfx/projection_variant.hpp>
+#include <mln/renderer/globe_tile_mesh.hpp>
 
 namespace mln {
 
@@ -57,6 +58,8 @@ private:
     gfx::ShaderProgramBasePtr hillshadePrepareShader;
     gfx::ShaderProgramBasePtr hillshadeShader;
     gfx::ProjectionVariant projectionVariant = gfx::ProjectionVariant::Mercator;
+
+    GlobeTileMeshCache<HillshadeLayoutVertex, decltype(&HillshadeBucket::layoutVertex)> globeMeshes;
     std::vector<RenderTargetPtr> activatedRenderTargets;
 
     using HillshadeVertexVector = gfx::VertexVector<HillshadeLayoutVertex>;

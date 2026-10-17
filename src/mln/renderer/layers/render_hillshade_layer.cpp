@@ -316,9 +316,11 @@ void RenderHillshadeLayer::update(gfx::ShaderRegistry& shaders,
         std::shared_ptr<gfx::IndexVector<gfx::Triangles>> indices;
         auto* segments = &staticDataSegments;
 
-        std::optional<GlobeTileMesh<HillshadeLayoutVertex, decltype(&HillshadeBucket::layoutVertex)>> globeMesh;
-        if (projectionVariant == gfx::ProjectionVariant::Globe) {
-            globeMesh.emplace(tileID.canonical, &HillshadeBucket::layoutVertex);
+        const GlobeTileMesh<HillshadeLayoutVertex, decltype(&HillshadeBucket::layoutVertex)>* globeMesh =
+            projectionVariant == gfx::ProjectionVariant::Globe
+                ? &globeMeshes.get(tileID.canonical, bucket.mask, &HillshadeBucket::layoutVertex)
+                : nullptr;
+        if (globeMesh) {
             vertices = globeMesh->vertices;
             indices = globeMesh->indices;
             segments = &globeMesh->segments;

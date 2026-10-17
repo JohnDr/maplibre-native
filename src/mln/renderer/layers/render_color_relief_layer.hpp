@@ -6,6 +6,7 @@
 #include <mln/style/layers/color_relief_layer_properties.hpp>
 #include <mln/util/image.hpp>
 #include <mln/gfx/projection_variant.hpp>
+#include <mln/renderer/globe_tile_mesh.hpp>
 #include <memory>
 #include <vector> // Added for std::vector<float>
 
@@ -66,6 +67,8 @@ private:
     // Shader
     gfx::ShaderProgramBasePtr colorReliefShader;
     gfx::ProjectionVariant projectionVariant = gfx::ProjectionVariant::Mercator;
+
+    GlobeTileMeshCache<HillshadeLayoutVertex, decltype(&HillshadeBucket::layoutVertex)> globeMeshes;
 
     // Vertex data
     using ColorReliefVertexVector = gfx::VertexVector<HillshadeLayoutVertex>;
