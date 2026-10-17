@@ -10,6 +10,10 @@
 #include <mln/util/convert.hpp>
 #include <mln/gfx/image_drawable_data.hpp>
 #include <mln/util/logging.hpp>
+#include <mln/gfx/uniform_buffer.hpp>
+
+#include <algorithm>
+#include <cstring>
 
 namespace mln {
 
@@ -71,8 +75,21 @@ void RasterLayerTweaker::execute([[maybe_unused]] LayerGroupBase& layerGroup,
 
 #if MLN_UBO_CONSOLIDATION
     int i = 0;
-    std::vector<RasterDrawableUBO> drawableUBOVector(layerGroup.getDrawableCount());
-    std::vector<ProjectionUBO> projectionUBOVector(layerGroup.getDrawableCount());
+    const std::size_t drawableCount = layerGroup.getDrawableCount();
+    // When draping, each terrain tile renders the same drawables with a different projection. Because every
+    // drape target is recorded into one command buffer and the layer's uniform buffers are single-window, the
+    // per-tile projection must live in its own block of the buffer, selected per draw via `uboIndex`. Without
+    // terrain, `baseElement` is 0 and the layout is the normal one.
+    // Reserve blocks [0, drawableCount) for the non-drape (main) pass; drape target `ordinal` uses the next block.
+    const std::uint32_t dcU = static_cast<std::uint32_t>(drawableCount);
+    const std::uint32_t baseElement =
+        parameters.drapeTargetOrdinal >= 0
+            ? (static_cast<std::uint32_t>(parameters.drapeTargetOrdinal) + 1u) * dcU
+            : 0u;
+    const std::uint32_t totalElements =
+        parameters.drapeTargetCount > 0 ? (parameters.drapeTargetCount + 1u) * dcU : dcU;
+    std::vector<RasterDrawableUBO> drawableUBOVector(drawableCount);
+    std::vector<ProjectionUBO> projectionUBOVector(drawableCount);
 #endif
 
     visitLayerGroupDrawables(layerGroup, [&](gfx::Drawable& drawable) {
@@ -121,7 +138,7 @@ void RasterLayerTweaker::execute([[maybe_unused]] LayerGroupBase& layerGroup,
             /* .matrix = */ util::cast<float>(matrix)
         };
 #if MLN_UBO_CONSOLIDATION
-        drawable.setUBOIndex(i++);
+        drawable.setUBOIndex(static_cast<int32_t>(baseElement + static_cast<std::uint32_t>(i++)));
 #else
         auto& drawableUniforms = drawable.mutableUniformBuffers();
         drawableUniforms.createOrUpdate(idRasterDrawableUBO, &drawableUBO, parameters.context);
@@ -130,16 +147,18 @@ void RasterLayerTweaker::execute([[maybe_unused]] LayerGroupBase& layerGroup,
 
 #if MLN_UBO_CONSOLIDATION
     auto& context = parameters.context;
-    const size_t drawableUBOVectorSize = sizeof(RasterDrawableUBO) * drawableUBOVector.size();
-    if (!drawableUniformBuffer || drawableUniformBuffer->getSize() < drawableUBOVectorSize) {
-        drawableUniformBuffer = context.createUniformBuffer(
-            drawableUBOVector.data(), drawableUBOVectorSize, false, true);
-    } else {
-        drawableUniformBuffer->update(drawableUBOVector.data(), drawableUBOVectorSize);
+
+    const std::size_t blockBytes = sizeof(RasterDrawableUBO) * drawableCount;
+    const std::size_t offsetBytes = sizeof(RasterDrawableUBO) * baseElement;
+    const std::size_t totalBytes = sizeof(RasterDrawableUBO) * totalElements;
+    if (!drawableUniformBuffer || drawableUniformBuffer->getSize() < totalBytes) {
+        std::vector<std::uint8_t> initial(totalBytes, 0);
+        drawableUniformBuffer = context.createUniformBuffer(initial.data(), totalBytes, false, true);
     }
+    drawableUniformBuffer->update(drawableUBOVector.data(), blockBytes, offsetBytes);
 
     layerUniforms.set(idRasterDrawableUBO, drawableUniformBuffer);
-    uploadProjectionUBOs(layerUniforms, projectionUBOVector, context);
+    uploadProjectionUBOs(layerUniforms, projectionUBOVector, context, baseElement, totalElements);
 #endif
 }
 

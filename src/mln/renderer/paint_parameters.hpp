@@ -83,6 +83,13 @@ public:
     // terrain drape target with a per-tile orthographic projection.
     std::optional<mat4> projMatrixOverride;
 
+    // Ordinal of the terrain drape target currently being rendered, or -1 when not draping. Layer tweakers use it
+    // to write each target's projection into its own block of the shared (single-window) projection buffer.
+    int32_t drapeTargetOrdinal{-1};
+    // Number of drape targets being rendered this frame; tweakers size their per-target buffers up front so the
+    // buffers are allocated once (no mid-frame reallocation / descriptor churn).
+    uint32_t drapeTargetCount{0};
+
     // Samples the terrain elevation (world pixels) at a tile's centre, for symbol elevation. Null without terrain.
     std::function<float(const UnwrappedTileID&)> terrainElevationFn;
 

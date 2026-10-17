@@ -40,6 +40,18 @@ void UniformBuffer::update(const void* data, std::size_t dataSize) {
     buffer.update(data, dataSize, /*offset=*/0);
 }
 
+void UniformBuffer::update(const void* data, std::size_t dataSize, std::size_t offset) {
+    assert(offset + dataSize <= size);
+    if (offset + dataSize > size || offset + dataSize > buffer.getSizeInBytes()) {
+        Log::Error(Event::General, "Mismatched range given to UBO update");
+        return;
+    }
+
+    buffer.getContext().renderingStats().numUniformUpdates++;
+    buffer.getContext().renderingStats().uniformUpdateBytes += dataSize;
+    buffer.update(data, dataSize, offset);
+}
+
 const std::shared_ptr<gfx::UniformBuffer>& UniformBufferArray::set(const size_t id,
                                                                    std::shared_ptr<gfx::UniformBuffer> uniformBuffer) {
     if (id >= uniformBufferVector.size()) {

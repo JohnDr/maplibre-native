@@ -17,9 +17,12 @@ public:
     const BufferResource& getBufferResource() const { return buffer; }
     BufferResource& mutableBufferResource() { return buffer; }
 
+    const void* contents() const override { return buffer.contents(); }
+
     UniformBuffer clone() const { return {buffer.clone()}; }
 
     void update(const void* data, std::size_t dataSize) override;
+    void update(const void* data, std::size_t dataSize, std::size_t offset) override;
 
 protected:
     BufferResource buffer;

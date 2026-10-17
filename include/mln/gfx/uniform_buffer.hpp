@@ -32,7 +32,16 @@ public:
     virtual ~UniformBuffer() = default;
     virtual void update(const void* data, std::size_t dataSize) = 0;
 
+    /// Update a sub-range starting at `offset` bytes. Backends that cannot write
+    /// sub-ranges fall back to a whole-buffer update at offset 0.
+    virtual void update(const void* data, std::size_t dataSize, [[maybe_unused]] std::size_t offset) {
+        update(data, dataSize);
+    }
+
     std::size_t getSize() const { return size; }
+
+    /// Pointer to the host-visible contents, or nullptr if not readable.
+    virtual const void* contents() const { return nullptr; }
 
     UniformBuffer& operator=(const UniformBuffer&) = delete;
 

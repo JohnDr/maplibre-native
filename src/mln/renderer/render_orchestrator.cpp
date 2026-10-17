@@ -1132,6 +1132,8 @@ void RenderOrchestrator::renderTerrainDrapeTargets(const RenderTree& renderTree,
     const TransformState& state = parameters.transformParams.state;
     const double worldSize = Projection::worldSize(state.getScale());
 
+    int32_t drapeOrdinal = 0;
+    parameters.drapeTargetCount = static_cast<uint32_t>(drapeTilesToRender.size());
     for (const auto& key : drapeTilesToRender) {
         const auto it = terrainDrapeTargets.find(key);
         if (it == terrainDrapeTargets.end() || !it->second) {
@@ -1148,9 +1150,12 @@ void RenderOrchestrator::renderTerrainDrapeTargets(const RenderTree& renderTree,
         mat4 ortho;
         matrix::ortho(ortho, tx, tx + s, ty + s, ty, -1.0, 1.0);
         parameters.projMatrixOverride = ortho;
+        parameters.drapeTargetOrdinal = drapeOrdinal++;
         it->second->render(*this, renderTree, parameters);
     }
     parameters.projMatrixOverride.reset();
+    parameters.drapeTargetOrdinal = -1;
+    parameters.drapeTargetCount = 0;
     drapeTilesToRender.clear();
 }
 

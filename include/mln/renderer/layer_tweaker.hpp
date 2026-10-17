@@ -85,7 +85,9 @@ protected:
     /// Upload the per-drawable projection blocks of this layer, indexed like the drawable UBO array
     void uploadProjectionUBOs(gfx::UniformBufferArray& layerUniforms,
                               const std::vector<shaders::ProjectionUBO>&,
-                              gfx::Context&);
+                              gfx::Context&,
+                              std::uint32_t baseElement = 0,
+                              std::uint32_t totalElements = 0);
     gfx::UniformBufferPtr projectionUniformBuffer;
 #endif
 

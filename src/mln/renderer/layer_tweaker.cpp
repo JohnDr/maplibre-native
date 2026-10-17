@@ -13,6 +13,9 @@
 #include <mln/util/constants.hpp>
 #include <mln/util/convert.hpp>
 
+#include <algorithm>
+#include <cstring>
+
 #if MLN_RENDER_BACKEND_METAL
 #include <mln/util/monotonic_timer.hpp>
 #include <chrono>
@@ -91,13 +94,21 @@ float LayerTweaker::globeExtrudeScale(const UnwrappedTileID& tileID, float zoom,
 #if MLN_UBO_CONSOLIDATION
 void LayerTweaker::uploadProjectionUBOs(gfx::UniformBufferArray& layerUniforms,
                                         const std::vector<shaders::ProjectionUBO>& ubos,
-                                        gfx::Context& context) {
-    const size_t size = sizeof(shaders::ProjectionUBO) * ubos.size();
+                                        gfx::Context& context,
+                                        std::uint32_t baseElement,
+                                        std::uint32_t totalElements) {
+    const size_t blockSize = sizeof(shaders::ProjectionUBO);
+    const size_t offset = blockSize * baseElement;
+    // Size for the whole frame's per-target blocks up front, so the buffer is allocated once (no reallocation /
+    // descriptor-set churn between the per-tile passes). Every block is (re)written each frame, so no copy needed.
+    const size_t elements = totalElements ? totalElements : (baseElement + ubos.size());
+    const size_t size = blockSize * elements;
+
     if (!projectionUniformBuffer || projectionUniformBuffer->getSize() < size) {
-        projectionUniformBuffer = context.createUniformBuffer(ubos.data(), size, false, true);
-    } else {
-        projectionUniformBuffer->update(ubos.data(), size);
+        std::vector<std::uint8_t> initial(size, 0);
+        projectionUniformBuffer = context.createUniformBuffer(initial.data(), size, false, true);
     }
+    projectionUniformBuffer->update(ubos.data(), blockSize * ubos.size(), offset);
     layerUniforms.set(shaders::idProjectionUBO, projectionUniformBuffer);
 }
 #endif
