@@ -40,20 +40,6 @@ constexpr double LightX = -0.7071067811865476 * 0.7071067811865476;
 constexpr double LightY = -0.7071067811865476 * 0.7071067811865476;
 constexpr double LightZ = 0.7071067811865476;
 
-class TerrainTweaker : public gfx::DrawableTweaker {
-public:
-    void init(gfx::Drawable&) override {}
-
-    void execute(gfx::Drawable& drawable, PaintParameters& parameters) override {
-        if (!drawable.getTileID()) {
-            return;
-        }
-        const auto ubo = LayerTweaker::toProjectionUBO(
-            parameters.projectionDataForTile(drawable.getTileID()->toUnwrapped()));
-        drawable.mutableUniformBuffers().createOrUpdate(shaders::idProjectionUBO, &ubo, parameters.context);
-    }
-};
-
 struct TerrainMesh {
     std::vector<uint8_t> vertices;
     std::size_t vertexCount = 0;
@@ -125,6 +111,7 @@ TerrainPass::~TerrainPass() = default;
 void TerrainPass::update(gfx::ShaderRegistry& shaders,
                          gfx::Context& context,
                          const TransformState& state,
+                         const PaintParameters& paintParameters,
                          const UpdateParameters& updateParameters) {
     if (!updateParameters.terrainTileset || updateParameters.terrainTileset->tiles.empty()) {
         if (layerGroup) {
@@ -195,13 +182,13 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             builder = context.createDrawableBuilder("terrain");
             builder->setShader(shader);
             builder->setRenderPass(RenderPass::Translucent);
+            builder->setColorMode(gfx::ColorMode::unblended());
             builder->setIs3D(true);
             builder->setEnableColor(true);
             builder->setEnableDepth(true);
             builder->setDepthType(gfx::DepthMaskType::ReadWrite);
             builder->setCullFaceMode(gfx::CullFaceMode::disabled());
             builder->setVertexAttrId(shaders::idTerrainPosVertexAttribute);
-            builder->addTweaker(std::make_shared<TerrainTweaker>());
         }
 
         auto mesh = buildTerrainMesh(*data, updateParameters.terrainExaggeration, metersPerPixel);
@@ -218,6 +205,17 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             layerGroup->addDrawable(RenderPass::Translucent, tileID, std::move(drawable));
         }
     }
+
+    // Set the projection UBO here rather than in a tweaker: updateLayers runs before the upload pass, so the buffers
+    // are uploaded with the current frame's matrices.
+    visitLayerGroupDrawables(*layerGroup, [&](gfx::Drawable& drawable) {
+        if (!drawable.getTileID()) {
+            return;
+        }
+        const auto ubo = LayerTweaker::toProjectionUBO(
+            paintParameters.projectionDataForTile(drawable.getTileID()->toUnwrapped()));
+        drawable.mutableUniformBuffers().createOrUpdate(shaders::idProjectionUBO, &ubo, paintParameters.context);
+    });
 }
 
 } // namespace mln

@@ -18,6 +18,7 @@ class ShaderRegistry;
 
 class TransformState;
 class UpdateParameters;
+class PaintParameters;
 class TerrainTileManager;
 
 /// Renders the terrain as a shaded, elevated surface: for each DEM tile, a grid mesh whose vertices carry a
@@ -27,7 +28,7 @@ public:
     TerrainPass();
     ~TerrainPass();
 
-    void update(gfx::ShaderRegistry&, gfx::Context&, const TransformState&, const UpdateParameters&);
+    void update(gfx::ShaderRegistry&, gfx::Context&, const TransformState&, const PaintParameters&, const UpdateParameters&);
 
     /// The layer group holding the terrain drawables, or null before the first enable.
     LayerGroupBase* getLayerGroup() const { return layerGroup.get(); }
