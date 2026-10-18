@@ -120,6 +120,13 @@ public:
         const auto matrix = LayerTweaker::getTileMatrix(
             tileID, parameters, {{0, 0}}, style::TranslateAnchorType::Viewport, false, false, drawable, false);
 
+        // The line shaders project through the ProjectionUBO as well.
+        const auto projectionUBO = LayerTweaker::toProjectionUBO(LayerTweaker::getProjectionData(
+            tileID, parameters, {{0, 0}}, style::TranslateAnchorType::Viewport, false, false, drawable, false));
+#if !MLN_UBO_CONSOLIDATION
+        drawable.mutableUniformBuffers().createOrUpdate(idProjectionUBO, &projectionUBO, parameters.context);
+#endif
+
         const shaders::LineEvaluatedPropsUBO propsUBO = {.color = options.color,
                                                          .blur = options.blur,
                                                          .opacity = options.opacity,
@@ -183,6 +190,7 @@ public:
         }
 
         layerUniforms->createOrUpdate(idLineEvaluatedPropsUBO, &propsUBO, sizeof(propsUBO), parameters.context);
+        layerUniforms->createOrUpdate(idProjectionUBO, &projectionUBO, sizeof(projectionUBO), parameters.context);
         layerUniforms->bind(*parameters.renderPass);
 #else
         auto& drawableUniforms = drawable.mutableUniformBuffers();
@@ -305,6 +313,13 @@ public:
         const auto matrix = LayerTweaker::getTileMatrix(
             tileID, parameters, {{0, 0}}, style::TranslateAnchorType::Viewport, false, false, drawable, false);
 
+        // The fill shaders project through the ProjectionUBO (patch 0004), not the drawable matrix.
+        const auto projectionUBO = LayerTweaker::toProjectionUBO(LayerTweaker::getProjectionData(
+            tileID, parameters, {{0, 0}}, style::TranslateAnchorType::Viewport, false, false, drawable, false));
+#if !MLN_UBO_CONSOLIDATION
+        drawable.mutableUniformBuffers().createOrUpdate(idProjectionUBO, &projectionUBO, parameters.context);
+#endif
+
         const shaders::FillEvaluatedPropsUBO propsUBO = {/* .color = */ .color = options.color,
                                                          /* .outline_color = */ .outline_color = Color::white(),
                                                          /* .opacity = */ .opacity = options.opacity,
@@ -338,6 +353,7 @@ public:
         }
 
         layerUniforms->createOrUpdate(idFillEvaluatedPropsUBO, &propsUBO, sizeof(propsUBO), parameters.context);
+        layerUniforms->createOrUpdate(idProjectionUBO, &projectionUBO, sizeof(projectionUBO), parameters.context);
         layerUniforms->bind(*parameters.renderPass);
 #else
         auto& drawableUniforms = drawable.mutableUniformBuffers();

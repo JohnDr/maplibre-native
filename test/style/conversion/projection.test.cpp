@@ -30,7 +30,8 @@ TEST(StyleConversion, Projection) {
         ASSERT_TRUE(projection);
         ASSERT_TRUE(projection->getType().isConstant());
         ASSERT_EQ(ProjectionDefinition("globe"), projection->getType().asConstant());
-        ASSERT_EQ(ProjectionDefinition("globe", "globe", 1), projection->impl->evaluate(3.f));
+        // `globe` hands over to Mercator between zoom 11 and 12; at zoom 3 it is fully the vertical perspective.
+        ASSERT_EQ(ProjectionDefinition("vertical-perspective", "vertical-perspective", 1), projection->impl->evaluate(3.f));
     }
 
     {
