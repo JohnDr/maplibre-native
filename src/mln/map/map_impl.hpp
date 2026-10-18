@@ -89,7 +89,7 @@ public:
 
     /// 3D terrain: the drawn terrain height at `latLng` in metres, without the exaggeration, or nullopt where it is
     /// not loaded (or there is no terrain). Fetches the DEM tiles it needs.
-    std::optional<double> terrainElevationAt(const LatLng&);
+    std::optional<double> terrainElevationAt(const LatLng&, bool fineOnly = false);
     /// 3D terrain: sets the camera centre's altitude from the terrain under it and keeps the camera out of the terrain.
     void updateTerrainCamera();
 
@@ -137,6 +137,8 @@ public:
     double terrainElevationExaggeration = 1.0;
     uint16_t terrainTileSize = 512; // the terrain source's tile size (sets the terrain tiles' zoom)
     bool terrainElevationApplied = false;
+    bool elevationReleased = false; ///< the hold just ended: put the centre back on the terrain, camera in place
+    bool elevationHeld = false;     ///< a gesture holds the centre elevation (GL JS holdElevation)
 };
 
 // Forward declaration of this method is required for the MapProjection class

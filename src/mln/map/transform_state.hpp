@@ -289,6 +289,24 @@ public:
                                                     uint8_t atZoom,
                                                     bool onCenterPlane = false) const;
 
+    /// The location under a screen point on the horizontal plane `elevation` metres above sea level (GL JS
+    /// `transform.screenPointToLocation(p, terrain)` / `screenPointToLocationAtElevation`). nullopt when the ray misses
+    /// the plane (the point is above the horizon, or past the far plane).
+    std::optional<LatLng> screenCoordinateToLatLngAtElevation(const ScreenCoordinate&,
+                                                              double elevation,
+                                                              LatLng::WrapMode = LatLng::Unwrapped) const;
+
+    /// GL JS `screenTerrainPointToMercatorCoordinate` / `_raycastTerrain`: marches the view ray through a screen point
+    /// against the terrain (`elevationAt`: metres above sea level, exaggeration included, nullopt where not known) and
+    /// returns where it first enters the terrain from above, with the terrain height there. nullopt when the ray
+    /// misses, the camera is inside the terrain, or the terrain is not known along the ray.
+    struct TerrainHit {
+        LatLng latLng;
+        double elevation;
+    };
+    std::optional<TerrainHit> raycastTerrain(const ScreenCoordinate&,
+                                             const std::function<std::optional<double>(const LatLng&)>& elevationAt) const;
+
     double zoomScale(double zoom) const;
     double scaleZoom(double scale) const;
 

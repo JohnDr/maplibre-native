@@ -110,6 +110,11 @@ public:
      */
     bool raiseCameraAboveTerrain(const std::function<std::optional<double>(const LatLng&)>& elevationAt,
                                  double marginMeters);
+    /// GL JS `putCenterBackOnTerrain` / `recalculateZoomAndCenter`: moves the centre along the view ray onto the terrain
+    /// (`elevationAt`, metres, exaggeration included) with the camera's position and orientation unchanged, so the picture
+    /// does not change; zoom is re-solved for the new camera-to-centre distance. Returns false (leaving the camera alone)
+    /// when the terrain is not available or the view ray does not reach it.
+    bool putCenterOnTerrainKeepingCamera(const std::function<std::optional<double>(const LatLng&)>& elevationAt);
 
     // North Orientation
     void setProjectionDefinition(const ProjectionDefinition&);

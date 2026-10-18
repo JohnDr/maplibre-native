@@ -135,6 +135,26 @@ public:
     /// The camera's own altitude in metres above sea level.
     double getCameraAltitude() const;
 
+    // Terrain-aware pointer anchoring (GL JS `Transform.screenPointToLocation` at an elevation and
+    // `Transform.setLocationAtPoint`, as used by the handler manager for drag-pan and scroll-zoom).
+    struct TerrainPoint {
+        LatLng latLng;
+        double elevation; ///< metres above sea level, exaggeration included
+    };
+    /// The location under `pixel` on the plane `elevation` metres above sea level; nullopt above the horizon.
+    std::optional<LatLng> latLngForPixelAtElevation(const ScreenCoordinate& pixel, double elevation) const;
+    /// The terrain surface point under `pixel` (ray marched against the DEM); nullopt without terrain, without loaded
+    /// DEM there, or above the horizon.
+    std::optional<TerrainPoint> terrainPointForPixel(const ScreenCoordinate& pixel) const;
+    /// Moves the centre (no animation) so that `latLng` is under `pixel`, solving on the plane at `elevation` metres
+    /// (the centre's plane when not given). Returns false, leaving the camera alone, when `pixel` is above the horizon.
+    bool setLocationAtPoint(const LatLng& latLng, const ScreenCoordinate& pixel, std::optional<double> elevation);
+    /// GL JS `holdElevation` / `releaseElevation`: while held, a gesture leaves the centre elevation (and so the camera)
+    /// alone; on release the centre is put back onto the terrain with the camera kept in place.
+    void setElevationHold(bool hold);
+    /// Whether the map is currently drawn as a globe (globe projection at low zoom) rather than Mercator.
+    bool isGlobeRendering() const;
+
     // Projection
     ScreenCoordinate pixelForLatLng(const LatLng&) const;
     LatLng latLngForPixel(const ScreenCoordinate&) const;

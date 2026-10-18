@@ -184,7 +184,7 @@ void Map::Impl::onUpdate() {
     rendererFrontend.update(std::make_shared<UpdateParameters>(std::move(params)));
 }
 
-std::optional<double> Map::Impl::terrainElevationAt(const LatLng& latLng) {
+std::optional<double> Map::Impl::terrainElevationAt(const LatLng& latLng, bool fineOnly) {
     if (!terrainElevation) {
         return std::nullopt;
     }
@@ -193,6 +193,16 @@ std::optional<double> Map::Impl::terrainElevationAt(const LatLng& latLng) {
     const auto source = terrainElevation->sourceTileFor(
         CanonicalTileID(TerrainTileManager::terrainZoomFor(transform.getZoom(), terrainTileSize), 0, 0));
     const uint8_t demZoom = source ? source->z : 0;
+    if (fineOnly) {
+        // Gesture anchoring: the finest DEM tile that is loaded here, stepping down one zoom at a time (the renderer
+        // draws distant terrain from coarser tiles too), never the 300 m average of the coarse fallback.
+        for (int z = demZoom; z >= std::max(0, static_cast<int>(demZoom) - 6); --z) {
+            if (const auto sample = terrainElevation->sampleElevation(latLng.wrapped(), static_cast<uint8_t>(z), static_cast<uint8_t>(z))) {
+                return sample;
+            }
+        }
+        return std::nullopt;
+    }
     return terrainElevation->sampleElevation(latLng.wrapped(), demZoom, std::min(coarseZoom, demZoom));
 }
 
@@ -236,6 +246,24 @@ void Map::Impl::updateTerrainCamera() {
     const auto centreElevation = terrainElevationAt(transform.getLatLng());
     if (!centreElevation) {
         return;
+    }
+    if (elevationHeld) {
+        // GL JS holdElevation(): a gesture leaves the centre elevation (and the camera with it) alone.
+        return;
+    }
+    if (elevationReleased) {
+        // GL JS putCenterBackOnTerrain(): the gesture ended; slide the centre along the view ray onto the terrain, the
+        // camera pose (and so the picture) unchanged.
+        elevationReleased = false;
+        const bool placed = transform.putCenterOnTerrainKeepingCamera(
+            [this, exaggeration](const LatLng& latLng) -> std::optional<double> {
+                const auto elevation = terrainElevationAt(latLng, true);
+                return elevation ? std::optional<double>(*elevation * exaggeration) : std::nullopt;
+            });
+        if (placed) {
+            terrainElevationApplied = true;
+            return;
+        }
     }
     transform.setElevation(*centreElevation * exaggeration);
     terrainElevationApplied = true;

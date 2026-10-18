@@ -1032,6 +1032,125 @@ LatLng TransformState::screenCoordinateToLatLng(const ScreenCoordinate& point, L
     return projection->unproject(coord.p, 1. / util::tileSize_D, wrapMode);
 }
 
+std::optional<LatLng> TransformState::screenCoordinateToLatLngAtElevation(const ScreenCoordinate& point,
+                                                                         double elevation,
+                                                                         LatLng::WrapMode wrapMode) const {
+    if (size.isEmpty()) {
+        return std::nullopt;
+    }
+    if (isGlobeRendering()) {
+        return VerticalPerspectiveProjection::screenCoordinateToLatLng(*this, point, wrapMode);
+    }
+
+    // As screenCoordinateToTileCoordinate: two points on the view ray, intersected with the plane z = elevation
+    // (the matrices take z in metres).
+    const double flippedY = size.height - point.y;
+    vec4 coord0;
+    vec4 coord1;
+    vec4 point0 = {{point.x, flippedY, 0, 1}};
+    vec4 point1 = {{point.x, flippedY, 1, 1}};
+    matrix::transformMat4(coord0, point0, getInvertedMatrix());
+    matrix::transformMat4(coord1, point1, getInvertedMatrix());
+
+    const double z0 = coord0[2] / coord0[3];
+    const double z1 = coord1[2] / coord1[3];
+    if (!(z0 > z1)) {
+        return std::nullopt; // the ray does not descend: above the horizon
+    }
+    const double t = (elevation - z0) / (z1 - z0);
+    if (!std::isfinite(t) || t < 0.0 || t > 1.0) {
+        return std::nullopt;
+    }
+    const Point<double> p0 = Point<double>(coord0[0], coord0[1]) / coord0[3];
+    const Point<double> p1 = Point<double>(coord1[0], coord1[1]) / coord1[3];
+    const Point<double> p = util::interpolate(p0, p1, t) / scale;
+    return projection->unproject(p, 1. / util::tileSize_D, wrapMode);
+}
+
+std::optional<TransformState::TerrainHit> TransformState::raycastTerrain(
+    const ScreenCoordinate& point,
+    const std::function<std::optional<double>(const LatLng&)>& elevationAt) const {
+    if (size.isEmpty() || isGlobeRendering()) {
+        return std::nullopt;
+    }
+    const double flippedY = size.height - point.y;
+    vec4 coord0;
+    vec4 coord1;
+    vec4 point0 = {{point.x, flippedY, 0, 1}};
+    vec4 point1 = {{point.x, flippedY, 1, 1}};
+    matrix::transformMat4(coord0, point0, getInvertedMatrix());
+    matrix::transformMat4(coord1, point1, getInvertedMatrix());
+    const double z0 = coord0[2] / coord0[3];
+    const double z1 = coord1[2] / coord1[3];
+    if (!(z0 > z1)) {
+        return std::nullopt; // the ray does not descend
+    }
+    const Point<double> p0 = Point<double>(coord0[0], coord0[1]) / coord0[3];
+    const Point<double> p1 = Point<double>(coord1[0], coord1[1]) / coord1[3];
+    const auto at = [&](double t) {
+        return projection->unproject(util::interpolate(p0, p1, t) / scale, 1. / util::tileSize_D, LatLng::Unwrapped);
+    };
+    const auto heightAt = [&](double t) { return z0 + (z1 - z0) * t; };
+
+    // Terrain tops out below ~9 km and bottoms out near sea level: only that band of the ray can meet it.
+    constexpr double maxTerrain = 9000.0;
+    constexpr double minTerrain = -500.0;
+    const double tStart = std::clamp((maxTerrain - z0) / (z1 - z0), 0.0, 1.0);
+    const double tEnd = std::clamp((minTerrain - z0) / (z1 - z0), 0.0, 1.0);
+    if (!(tStart < tEnd)) {
+        return std::nullopt;
+    }
+    // About one sample per 4 m of ground travelled (a DEM cell is ~10 m at the finest zoom).
+    const LatLng a = at(tStart);
+    const LatLng b = at(tEnd);
+    const double metersPerDegree = util::deg2rad(util::EARTH_RADIUS_M);
+    const double groundMeters = std::hypot((b.latitude() - a.latitude()) * metersPerDegree,
+                                           (b.longitude() - a.longitude()) * metersPerDegree *
+                                               std::cos(util::deg2rad(a.latitude())));
+    const int samples = std::clamp(static_cast<int>(std::ceil(groundMeters / 4.0)), 8, 4000);
+
+    // `below(t)`: the ray is under the terrain at t; nullopt where the terrain is unknown.
+    const auto below = [&](double t) -> std::optional<bool> {
+        const auto elevation = elevationAt(at(t));
+        if (!elevation) {
+            return std::nullopt;
+        }
+        return heightAt(t) <= *elevation;
+    };
+
+    double previous = tStart;
+    bool above = false;
+    for (int i = 0; i <= samples; ++i) {
+        const double t = tStart + (tEnd - tStart) * static_cast<double>(i) / static_cast<double>(samples);
+        const auto isBelow = below(t);
+        if (!isBelow) {
+            return std::nullopt;
+        }
+        if (!*isBelow) {
+            above = true;
+        } else if (above) {
+            double lo = previous;
+            double hi = t;
+            for (int k = 0; k < 24; ++k) {
+                const double mid = 0.5 * (lo + hi);
+                const auto midBelow = below(mid);
+                if (!midBelow) {
+                    return std::nullopt;
+                }
+                (*midBelow ? hi : lo) = mid;
+            }
+            const LatLng hit = at(hi);
+            const auto elevation = elevationAt(hit);
+            if (!elevation) {
+                return std::nullopt;
+            }
+            return TerrainHit{hit, *elevation};
+        }
+        previous = t;
+    }
+    return std::nullopt;
+}
+
 mat4 TransformState::coordinatePointMatrix(const mat4& projMatrix) const {
     mat4 proj = projMatrix;
     matrix::scale(proj, proj, util::tileSize_D, util::tileSize_D, 1);

@@ -5,6 +5,7 @@
 #include <mln/map/map_impl.hpp>
 #include <mln/map/transform.hpp>
 #include <mln/math/angles.hpp>
+#include <mln/util/projection.hpp>
 #include <mln/style/projection.hpp>
 #include <mln/style/projection_definition.hpp>
 #include <mln/style/terrain.hpp>
@@ -483,6 +484,66 @@ std::string Map::getTerrainSource() const {
 
 std::optional<double> Map::queryTerrainElevation(const LatLng& latLng) const {
     return impl->terrainElevationAt(latLng);
+}
+
+std::optional<LatLng> Map::latLngForPixelAtElevation(const ScreenCoordinate& pixel, double elevation) const {
+    // The state-level unprojections take the pixel y up (see Transform::screenCoordinateToLatLng).
+    const TransformState& state = impl->transform.getState();
+    return state.screenCoordinateToLatLngAtElevation({pixel.x, state.getSize().height - pixel.y}, elevation, LatLng::Unwrapped);
+}
+
+std::optional<Map::TerrainPoint> Map::terrainPointForPixel(const ScreenCoordinate& pixel) const {
+    if (!impl->terrainElevation) {
+        return std::nullopt;
+    }
+    const double exaggeration = getTerrainExaggeration();
+    // GL JS reads the rendered depth; here the view ray is marched against the DEM the terrain is built from.
+    const TransformState& rayState = impl->transform.getState();
+    const auto hit = rayState.raycastTerrain(
+        {pixel.x, rayState.getSize().height - pixel.y}, [this, exaggeration](const LatLng& latLng) -> std::optional<double> {
+            const auto elevation = impl->terrainElevationAt(latLng.wrapped(), true);
+            return elevation ? std::optional<double>(*elevation * exaggeration) : std::nullopt;
+        });
+    if (!hit) {
+        return std::nullopt;
+    }
+    return TerrainPoint{hit->latLng, hit->elevation};
+}
+
+bool Map::setLocationAtPoint(const LatLng& latLng, const ScreenCoordinate& pixel, std::optional<double> elevation) {
+    const TransformState& state = impl->transform.getState();
+    const auto current = state.screenCoordinateToLatLngAtElevation({pixel.x, state.getSize().height - pixel.y},
+                                                                   elevation.value_or(state.getCenterAltitude()),
+                                                                   LatLng::Unwrapped);
+    if (!current) {
+        return false;
+    }
+    const double scale = state.getScale();
+    const Point<double> centre = mln::Projection::project(state.getLatLng(LatLng::Unwrapped), scale);
+    const Point<double> wanted = mln::Projection::project(latLng, scale);
+    const Point<double> now = mln::Projection::project(*current, scale);
+    // Shortest way round the world in x, so a drag across the antimeridian does not jump.
+    const double world = mln::Projection::worldSize(scale);
+    double dx = wanted.x - now.x;
+    dx -= world * std::round(dx / world);
+    const Point<double> target{centre.x + dx, centre.y + (wanted.y - now.y)};
+    impl->cameraMutated = true;
+    impl->transform.jumpTo(CameraOptions().withCenter(mln::Projection::unproject(target, scale)));
+    impl->onUpdate();
+    return true;
+}
+
+bool Map::isGlobeRendering() const {
+    return impl->transform.getState().isGlobeRendering();
+}
+
+void Map::setElevationHold(bool hold) {
+    if (impl->elevationHeld == hold) {
+        return;
+    }
+    impl->elevationHeld = hold;
+    impl->elevationReleased = !hold;
+    impl->onUpdate();
 }
 
 double Map::getElevation() const {

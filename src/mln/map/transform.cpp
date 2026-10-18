@@ -612,6 +612,66 @@ bool Transform::raiseCameraAboveTerrain(const std::function<std::optional<double
     return true;
 }
 
+bool Transform::putCenterOnTerrainKeepingCamera(const std::function<std::optional<double>(const LatLng&)>& elevationAt) {
+    if (state.isGlobeRendering()) {
+        return false;
+    }
+    const LatLng centre = state.getLatLng(LatLng::Unwrapped);
+    const double pitch = state.getPitch();
+    if (pitch > util::deg2rad(85.5)) {
+        return false;
+    }
+    const double compass = -state.getBearing(); // the state stores the bearing negated
+    const double metersPerPixel = Projection::getMetersPerPixelAtLatitude(centre.latitude(), state.getZoom());
+    const double toCenterPx = state.getCameraToCenterDistance();
+    const double distance = toCenterPx * metersPerPixel;
+    const double cameraAlt = state.getCenterAltitude() + distance * std::cos(pitch);
+    const double metersPerDegreeLat = util::deg2rad(util::EARTH_RADIUS_M);
+    const double metersPerDegreeLon = metersPerDegreeLat * std::cos(util::deg2rad(centre.latitude()));
+    if (metersPerDegreeLon < 1.0) {
+        return false;
+    }
+    // The camera's ground position: behind the centre, against the view direction.
+    const double horizontal = distance * std::sin(pitch);
+    const LatLng camera{centre.latitude() - horizontal * std::cos(compass) / metersPerDegreeLat,
+                        centre.longitude() - horizontal * std::sin(compass) / metersPerDegreeLon};
+
+    // Where the view ray reaches the terrain: the point along it at the terrain's own height (fixed-point).
+    double height = state.getCenterAltitude();
+    LatLng hit = centre;
+    for (int i = 0; i < 8; ++i) {
+        const double reach = (cameraAlt - height) * std::tan(pitch);
+        if (!(cameraAlt - height > 1.0)) {
+            return false;
+        }
+        hit = LatLng{camera.latitude() + reach * std::cos(compass) / metersPerDegreeLat,
+                     camera.longitude() + reach * std::sin(compass) / metersPerDegreeLon};
+        const auto elevation = elevationAt(hit.wrapped());
+        if (!elevation) {
+            return false;
+        }
+        const bool converged = std::abs(*elevation - height) < 0.25;
+        height = *elevation;
+        if (converged) {
+            break;
+        }
+    }
+    const double newHeight = cameraAlt - height;
+    if (!(newHeight > 1.0)) {
+        return false;
+    }
+    const double newDistance = newHeight / std::cos(pitch);
+    const double newMetersPerPixel = newDistance / toCenterPx;
+    const double equatorMetersPerPixelAtZoom0 = std::cos(util::deg2rad(hit.latitude())) * util::M2PI *
+                                                util::EARTH_RADIUS_M / util::tileSize_D;
+    const double newZoom = util::clamp(std::log2(equatorMetersPerPixelAtZoom0 / newMetersPerPixel),
+                                       state.getMinZoomAtLatitude(hit.latitude()),
+                                       state.getMaxZoom());
+    state.setLatLngZoom(hit, newZoom);
+    state.setCenterAltitude(height);
+    return true;
+}
+
 // MARK: - North Orientation
 
 void Transform::setProjectionDefinition(const ProjectionDefinition& definition) {
