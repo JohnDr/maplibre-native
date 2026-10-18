@@ -282,10 +282,19 @@ private:
     // Per-tile offscreen targets holding the map layers draped over the terrain, keyed by tile (z, x, y).
     std::map<std::tuple<uint8_t, uint32_t, uint32_t>, RenderTargetPtr> terrainDrapeTargets;
     uint32_t terrainDrapeTileSize = 0;
-    // Per-tile fingerprint of the state the drape texture was rendered from (GL JS `RTTFingerprint`): the style
-    // identity and the source tiles under the drape tile with their revisions. A tile is re-rendered only when it
-    // changes.
-    std::map<std::tuple<uint8_t, uint32_t, uint32_t>, uint64_t> terrainDrapeFingerprints;
+    // Per-tile fingerprint of the state the drape texture was rendered from (GL JS `RTTFingerprint`).
+    struct DrapeFingerprint {
+        uint64_t style = 0;         // the style (layers, sources, images) the texture was rendered from
+        uint64_t visibleLayers = 0; // which drape layers are in their zoom range
+        /// The source tiles under the drape tile, per drape layer, sorted by key, with their data revisions.
+        std::vector<std::pair<uint64_t, uint64_t>> sourceTiles;
+        double zoom = 0;            // the map zoom it was rendered at
+    };
+    enum class DrapeDifference { None, Zoom, SourceTiles, VisibleLayers, Revision };
+    std::map<std::tuple<uint8_t, uint32_t, uint32_t>, DrapeFingerprint> terrainDrapeFingerprints;
+    // Targets of tiles that left the cover, reused by new tiles (GL JS RTT recycle pool); emptied at rest.
+    std::vector<RenderTargetPtr> terrainDrapePool;
+    double lastDrapeZoom = -1;
     std::set<std::tuple<uint8_t, uint32_t, uint32_t>> drapeTilesToRender;
     // How often each source tile's data changed, keyed by (source id, tile z, x, y).
     std::map<std::tuple<std::string, uint8_t, uint32_t, uint32_t>, uint64_t> drapeTileRevisions;

@@ -1076,23 +1076,38 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
         if (drapeTileSize != terrainDrapeTileSize) {
             terrainDrapeTileSize = drapeTileSize;
             terrainDrapeTargets.clear();
+            terrainDrapePool.clear();
             terrainDrapeFingerprints.clear();
         }
         const auto& cover = terrainPass.getCover();
+        const TransformState& transformState = updateParameters->transformState;
+        const double zoom = transformState.getZoom();
+        const bool zoomChanged = zoom != lastDrapeZoom;
+        lastDrapeZoom = zoom;
+        const bool moving = zoomChanged || transformState.isChanging();
 
-        // A drape tile's fingerprint is GL JS's `RTTFingerprint`: the style (layers, sources, images), and the source
-        // tiles drawn into it with their data revision. It is re-rendered only when that changes, not on every
-        // source tile load anywhere in the view.
+        // GL JS `RTTFingerprint` (rtt_fingerprint.ts): what a drape tile's texture was rendered from, compared in
+        // order of severity: `zoom` (rendered at another zoom, so zoom-dependent style properties differ),
+        // `sourceTiles` (other source tiles under it), `visibleLayers` (a layer entered or left its zoom range) and
+        // `revision` (the style, or the data of a source tile it shows, changed; a tile without a fingerprint counts
+        // as this).
         const uint64_t styleFingerprint = (reinterpret_cast<uintptr_t>(updateParameters->layers.get()) * 1000003ULL) ^
                                           (reinterpret_cast<uintptr_t>(updateParameters->sources.get()) * 1000033ULL) ^
                                           (reinterpret_cast<uintptr_t>(updateParameters->images.get()) * 1000037ULL) ^
                                           (static_cast<uint64_t>(layerGroupsByLayerIndex.size()) << 20) ^
                                           (static_cast<uint64_t>(drapeLayerIndices.size()) << 8);
+        const auto& styleLayers = *updateParameters->layers;
+        uint64_t visibleLayersFingerprint = 1469598103934665603ULL;
         std::vector<std::pair<int32_t, std::set<std::tuple<uint8_t, uint32_t, uint32_t>>>> drapeGroupTiles;
         for (const auto& [index, layerGroup] : layerGroupsByLayerIndex) {
             if (!layerGroup || !drapeLayerIndices.contains(index)) {
                 continue;
             }
+            const auto& layerImpl = *styleLayers[static_cast<std::size_t>(index)];
+            const bool visible = layerImpl.visibility != style::VisibilityType::None && zoom >= layerImpl.minZoom &&
+                                 zoom < layerImpl.maxZoom;
+            visibleLayersFingerprint = (visibleLayersFingerprint ^ (static_cast<uint64_t>(index) * 2 + (visible ? 1 : 0))) *
+                                       1099511628211ULL;
             auto& tilesOfGroup = drapeGroupTiles.emplace_back(index, std::set<std::tuple<uint8_t, uint32_t, uint32_t>>{});
             visitLayerGroupDrawables(*layerGroup, [&](gfx::Drawable& drawable) {
                 if (const auto& id = drawable.getTileID()) {
@@ -1100,13 +1115,13 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
                 }
             });
         }
-        const auto sourceTilesFingerprint = [&](const std::tuple<uint8_t, uint32_t, uint32_t>& key) {
+        const auto fingerprintFor = [&](const std::tuple<uint8_t, uint32_t, uint32_t>& key) {
             const auto [kz, kx, ky] = key;
-            uint64_t hash = 1469598103934665603ULL;
-            const auto mix = [&hash](uint64_t value) { hash = (hash ^ value) * 1099511628211ULL; };
-            const auto& styleLayers = *updateParameters->layers;
+            DrapeFingerprint fingerprint;
+            fingerprint.style = styleFingerprint;
+            fingerprint.visibleLayers = visibleLayersFingerprint;
+            fingerprint.zoom = zoom;
             for (const auto& [index, group] : drapeGroupTiles) {
-                mix(static_cast<uint64_t>(index) + 1);
                 const std::string& sourceID = styleLayers[static_cast<std::size_t>(index)]->source;
                 for (const auto& [z, x, y] : group) {
                     // Overlap: one tile contains the other.
@@ -1116,29 +1131,93 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
                         continue;
                     }
                     const auto revision = drapeTileRevisions.find({sourceID, z, x, y});
-                    mix((static_cast<uint64_t>(z) << 56) ^ (static_cast<uint64_t>(x) << 28) ^ y);
-                    mix(revision != drapeTileRevisions.end() ? revision->second : 0);
+                    fingerprint.sourceTiles.emplace_back((static_cast<uint64_t>(index) << 56) ^
+                                                             (static_cast<uint64_t>(z) << 48) ^
+                                                             (static_cast<uint64_t>(x) << 24) ^ y,
+                                                         revision != drapeTileRevisions.end() ? revision->second : 0);
                 }
             }
-            return hash;
+            std::sort(fingerprint.sourceTiles.begin(), fingerprint.sourceTiles.end());
+            return fingerprint;
         };
 
-        std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr> drapeTextures;
+        // The most severe difference between a texture's fingerprint and what this frame would render. A source tile
+        // that is in both with another revision is a data change; tiles entering or leaving are `sourceTiles`.
+        const auto differenceOf = [](const DrapeFingerprint& stored, const DrapeFingerprint& now) {
+            if (stored.style != now.style) {
+                return DrapeDifference::Revision;
+            }
+            bool tilesDiffer = stored.sourceTiles.size() != now.sourceTiles.size();
+            auto a = stored.sourceTiles.begin();
+            auto b = now.sourceTiles.begin();
+            while (a != stored.sourceTiles.end() && b != now.sourceTiles.end()) {
+                if (a->first == b->first) {
+                    if (a->second != b->second) {
+                        return DrapeDifference::Revision;
+                    }
+                    ++a;
+                    ++b;
+                } else {
+                    tilesDiffer = true;
+                    a->first < b->first ? ++a : ++b;
+                }
+            }
+            if (a != stored.sourceTiles.end() || b != now.sourceTiles.end()) {
+                tilesDiffer = true;
+            }
+            if (stored.visibleLayers != now.visibleLayers) {
+                return DrapeDifference::VisibleLayers;
+            }
+            if (tilesDiffer) {
+                return DrapeDifference::SourceTiles;
+            }
+            return stored.zoom == now.zoom ? DrapeDifference::None : DrapeDifference::Zoom;
+        };
+
+        // Targets of tiles that left the cover go back to the pool (GL JS `releaseRTT` -> `_rttObjectRecyclePool`),
+        // and new tiles take from it before allocating.
         std::set<std::tuple<uint8_t, uint32_t, uint32_t>> live;
+        for (const auto& tileID : cover) {
+            const auto c = tileID.canonical;
+            live.emplace(c.z, c.x, c.y);
+        }
+        for (auto it = terrainDrapeTargets.begin(); it != terrainDrapeTargets.end();) {
+            if (live.contains(it->first)) {
+                ++it;
+                continue;
+            }
+            terrainDrapePool.push_back(std::move(it->second));
+            terrainDrapeFingerprints.erase(it->first);
+            it = terrainDrapeTargets.erase(it);
+        }
+        for (auto it = terrainDrapeFingerprints.begin(); it != terrainDrapeFingerprints.end();) {
+            it = live.contains(it->first) ? std::next(it) : terrainDrapeFingerprints.erase(it);
+        }
+
+        std::map<std::tuple<uint8_t, uint32_t, uint32_t>, gfx::Texture2DPtr> drapeTextures;
         drapeTilesToRender.clear();
+        bool needsFollowUpFrame = false;
+        bool staleTileReleased = false;
         for (const auto& tileID : cover) {
             const auto c = tileID.canonical;
             const auto key = std::make_tuple(c.z, c.x, c.y);
-            live.insert(key);
             auto it = terrainDrapeTargets.find(key);
             if (it == terrainDrapeTargets.end()) {
-                auto rt = context.createRenderTarget({drapeTileSize, drapeTileSize},
-                                                     gfx::TextureChannelDataType::UnsignedByte);
+                RenderTargetPtr rt;
+                if (!terrainDrapePool.empty()) {
+                    rt = std::move(terrainDrapePool.back());
+                    terrainDrapePool.pop_back();
+                } else {
+                    rt = context.createRenderTarget({drapeTileSize, drapeTileSize},
+                                                    gfx::TextureChannelDataType::UnsignedByte);
+                    if (rt) {
+                        rt->setClearColor(Color{0.0f, 0.0f, 0.0f, 0.0f}); // transparent: unrendered != black imagery
+                    }
+                }
                 if (!rt) {
                     continue;
                 }
-                rt->setClearColor(Color{0.0f, 0.0f, 0.0f, 0.0f}); // transparent: unrendered != black imagery
-                it = terrainDrapeTargets.emplace(key, rt).first;
+                it = terrainDrapeTargets.emplace(key, std::move(rt)).first;
             }
             for (auto& [index, layerGroup] : layerGroupsByLayerIndex) {
                 if (layerGroup && drapeLayerIndices.contains(index)) {
@@ -1146,23 +1225,45 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
                 }
             }
             drapeTextures[key] = it->second->getTexture();
-            // Re-render only tiles that are new or whose source state changed.
-            const uint64_t fingerprint = styleFingerprint ^ sourceTilesFingerprint(key);
+
+            // GL JS `RenderToTexture::prepareForRender`: textures rendered at another zoom are kept while the camera
+            // moves or zooms (no flashing) and refreshed afterwards; stale ones are refreshed one tile per frame, with
+            // a follow-up frame requested for the rest; a layer entering or leaving its zoom range, or a data change,
+            // re-renders immediately.
+            const DrapeFingerprint fingerprint = fingerprintFor(key);
             const auto fpIt = terrainDrapeFingerprints.find(key);
-            if (fpIt == terrainDrapeFingerprints.end() || fpIt->second != fingerprint) {
-                drapeTilesToRender.insert(key);
-                terrainDrapeFingerprints[key] = fingerprint;
+            const auto difference = fpIt != terrainDrapeFingerprints.end() ? differenceOf(fpIt->second, fingerprint)
+                                                                            : DrapeDifference::Revision;
+            if (difference == DrapeDifference::None) {
+                continue;
             }
-        }
-        for (auto it = terrainDrapeTargets.begin(); it != terrainDrapeTargets.end();) {
-            it = live.contains(it->first) ? std::next(it) : terrainDrapeTargets.erase(it);
-        }
-        for (auto it = terrainDrapeFingerprints.begin(); it != terrainDrapeFingerprints.end();) {
-            it = live.contains(it->first) ? std::next(it) : terrainDrapeFingerprints.erase(it);
+            if ((difference == DrapeDifference::Zoom && moving) ||
+                (difference == DrapeDifference::VisibleLayers && zoomChanged)) {
+                needsFollowUpFrame = true;
+                continue;
+            }
+            if (difference == DrapeDifference::Zoom || difference == DrapeDifference::SourceTiles) {
+                if (staleTileReleased) {
+                    needsFollowUpFrame = true;
+                    continue;
+                }
+                staleTileReleased = true;
+            }
+            drapeTilesToRender.insert(key);
+            terrainDrapeFingerprints[key] = fingerprint;
         }
         terrainPass.applyDrapeTextures(drapeTextures);
-    } else if (!terrainDrapeTargets.empty()) {
+        if (needsFollowUpFrame) {
+            observer->onInvalidate(); // GL JS `needsFollowUpFrame`
+        }
+        // At rest the pooled targets nobody holds are freed (GL JS `painter.clearRTTPool`); while moving they are kept
+        // for the tiles that come into view.
+        if (!moving) {
+            terrainDrapePool.clear();
+        }
+    } else if (!terrainDrapeTargets.empty() || !terrainDrapePool.empty()) {
         terrainDrapeTargets.clear();
+        terrainDrapePool.clear();
         terrainDrapeFingerprints.clear();
         drapeTilesToRender.clear();
         terrainPass.applyDrapeTextures({});
