@@ -43,7 +43,10 @@ mat4 LayerTweaker::getTileMatrix(const UnwrappedTileID& tileID,
                                  bool aligned) {
     // from RenderTile::prepare
     mat4 tileMatrix;
-    parameters.state.matrixFor(/*out*/ tileMatrix, tileID);
+    // A terrain drape target covers the canonical tile, whichever world copy (wrap) the source tile belongs to
+    // (GL JS renders the wrapped tile ID).
+    parameters.state.matrixFor(/*out*/ tileMatrix,
+                               parameters.projMatrixOverride ? UnwrappedTileID(0, tileID.canonical) : tileID);
     if (const auto& origin{drawable.getOrigin()}; origin.has_value()) {
         matrix::translate(tileMatrix, tileMatrix, origin->x, origin->y, 0);
     }
@@ -63,6 +66,12 @@ ProjectionData LayerTweaker::getProjectionData(const UnwrappedTileID& tileID,
     auto data = parameters.state.getProjectionDataForMatrix(
         tileID,
         getTileMatrix(tileID, parameters, translation, anchor, nearClipped, inViewportPixelUnits, drawable, aligned));
+    if (parameters.projMatrixOverride) {
+        // A terrain drape target is flat Mercator whatever the map projection (GL JS draws render-to-texture tiles with
+        // `applyGlobeMatrix: false`): the globe variants of the shaders fall back to the Mercator matrix.
+        data.mainMatrix = data.fallbackMatrix;
+        data.projectionTransition = 0.0;
+    }
 #if MLN_GLOBE_DEPTH_OFFSET_IN_SHADER
     // The same per-layer shift `multiplyWithProjectionMatrix` bakes into the Mercator matrix.
     if (!drawable.getIs3D() && drawable.getEnableDepth()) {

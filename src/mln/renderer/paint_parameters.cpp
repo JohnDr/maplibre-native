@@ -117,7 +117,11 @@ mat4 PaintParameters::matrixForTile(const UnwrappedTileID& tileID, bool aligned)
 
 ProjectionData PaintParameters::projectionDataForTile(const UnwrappedTileID& tileID, bool aligned) const {
     if (projMatrixOverride) {
-        return state.getProjectionData(tileID, *projMatrixOverride);
+        // A terrain drape target is flat Mercator whatever the map projection (see LayerTweaker::getProjectionData).
+        auto data = state.getProjectionData(UnwrappedTileID(0, tileID.canonical), *projMatrixOverride);
+        data.mainMatrix = data.fallbackMatrix;
+        data.projectionTransition = 0.0;
+        return data;
     }
     return state.getProjectionData(tileID, aligned ? transformParams.alignedProjMatrix : transformParams.projMatrix);
 }
