@@ -22,6 +22,7 @@
 #include <mln/shaders/shader_defines.hpp>
 #include <mln/util/constants.hpp>
 #include <mln/util/projection.hpp>
+#include <mln/util/subdivision.hpp> // NORTH_POLE_Y / SOUTH_POLE_Y
 #include <mln/util/tile_cover.hpp>
 #include <algorithm>
 #include <array>
@@ -89,7 +90,9 @@ struct EdgeStitch {
 /// from that tile's mesh edge, so the two meets without a crack (GL JS hides the crack with the skirt only).
 TerrainMesh buildTerrainMesh(const TileDem& dem,
                              double exaggeration,
-                             const std::array<std::optional<EdgeStitch>, 4>& stitch) {
+                             const std::array<std::optional<EdgeStitch>, 4>& stitch,
+                             bool northPole,
+                             bool southPole) {
     const std::size_t n = TerrainGridPoints;
     const double extent = static_cast<double>(util::EXTENT);
 
@@ -152,6 +155,12 @@ TerrainMesh buildTerrainMesh(const TileDem& dem,
             dst[1] = src[1];
             dst[2] = src[2];
             dst[3] = 1.0f; // lowered by the skirt length in the vertex shader (GL JS `u_ele_delta`)
+            // GL JS `_buildSkirts`: on the globe the outer edge row of a polar tile is the pole itself (a sentinel Y
+            // the vertex shader maps to the pole), not lowered, so the tile is capped up to the pole.
+            if ((side == 0 && northPole) || (side == 1 && southPole)) {
+                dst[1] = static_cast<float>(side == 0 ? util::NORTH_POLE_Y : util::SOUTH_POLE_Y);
+                dst[3] = 0.0f;
+            }
         }
     }
     mesh.vertexCount = n * n + 4 * n;
@@ -372,7 +381,10 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             stitch[static_cast<std::size_t>(side)] = std::move(edge);
         }
         stitchInfo[tileID] = std::move(stitchNow);
-        auto mesh = buildTerrainMesh(tileDemFor(canonical, source), updateParameters.terrainExaggeration, stitch);
+        const bool northPole = globeShader && canonical.y == 0;
+        const bool southPole = globeShader && canonical.y + 1 == (1u << canonical.z);
+        auto mesh = buildTerrainMesh(
+            tileDemFor(canonical, source), updateParameters.terrainExaggeration, stitch, northPole, southPole);
         const auto vertexCount = mesh.vertexCount;
         const auto indexCount = mesh.indices.size();
         builder->setRawVertices(std::move(mesh.vertices), vertexCount, gfx::AttributeDataType::Float4);

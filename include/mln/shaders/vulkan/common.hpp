@@ -214,6 +214,13 @@ vec4 interpolateProjectionFor3D(vec2 posInTile, vec3 spherePos, float elevation,
     if (projection.projection_transition > 0.999) {
         return globePosition;
     }
+    if ((posInTile.y < GLOBE_POLE_NORTH_Y) || (posInTile.y > GLOBE_POLE_SOUTH_Y)) {
+        // Pole vertices only exist on the globe: they stay while it is (nearly) fully globe and are clipped away
+        // (beyond the far plane) as the projection flattens, as in interpolateProjection.
+        vec4 poleResult = globePosition;
+        poleResult.z = mix(globePosition.z, 2.0 * globePosition.w, pow(max((1.0 - projection.projection_transition) / 0.02, 0.0), 8.0));
+        return poleResult;
+    }
     const vec4 fallbackPosition = projection.fallback_matrix * vec4(posInTile, elevation, 1.0);
     return mix(fallbackPosition, globePosition, projection.projection_transition);
 }
