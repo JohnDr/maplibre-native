@@ -24,6 +24,13 @@ public:
     /// Mirrors GL JS `DEMData#getElevation`, adapted to this class's one-pixel border.
     double getElevation(double x, double y) const;
 
+    /// The elevation, in metres, at a point of the tile given in pixel EDGES: (0, 0) is the top-left corner of the first
+    /// pixel and (`dim`, `dim`) the bottom-right corner of the last, so a tile-fraction `f` is `f * dim`. DEM pixel `i`
+    /// holds the value at its centre, `i + 0.5` (GL JS: `DEM_CELL_CENTER_OFFSET = -0.5` on the CPU, `uv * dim + 1.5` in
+    /// the terrain vertex shader). Use this, not `getElevation`, for anything placed on the map by position: terrain
+    /// meshes, elevation queries, camera elevation. Reads the 1-pixel border at the tile edges.
+    double getElevationAtPoint(double x, double y) const { return getElevation(x - 0.5, y - 0.5); }
+
     const PremultipliedImage* getImage() const { return &*image; }
     const std::shared_ptr<PremultipliedImage>& getImagePtr() const { return image; }
 

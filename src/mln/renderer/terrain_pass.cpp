@@ -58,7 +58,7 @@ struct TileDem {
 
     /// The elevation in metres at (u, v) in 0..1 across the terrain tile.
     double elevation(double u, double v) const {
-        return data != nullptr ? data->getElevation(offsetX + u * size, offsetY + v * size) : 0.0;
+        return data != nullptr ? data->getElevationAtPoint(offsetX + u * size, offsetY + v * size) : 0.0;
     }
 };
 

@@ -179,3 +179,31 @@ TEST(DEMData, SharedEdgeIsContinuousAfterBackfill) {
     // The border pixel is addressable below zero as well (used for edge slopes).
     EXPECT_DOUBLE_EQ(demRight.getElevation(-1.0, 3.0), static_cast<double>(demRight.get(-1, 3)));
 }
+
+// GL JS places DEM pixel i at tile coordinate (i + 0.5) / dim: sampling at the pixel centre returns the pixel's value, the
+// tile edges lie between two pixels, and the 1-pixel border is enough for the whole [0, dim] range.
+TEST(DEMData, ElevationAtPointUsesPixelCentres) {
+    PremultipliedImage image = fakeImage({16, 16});
+    DEMData demdata(image, Tileset::RasterEncoding::Mapbox);
+
+    for (int32_t x = 0; x < 16; x++) {
+        for (int32_t y = 0; y < 16; y++) {
+            EXPECT_DOUBLE_EQ(demdata.getElevationAtPoint(x + 0.5, y + 0.5), demdata.get(x, y));
+        }
+    }
+    // The tile edge (0) is halfway between the border pixel and pixel 0; the far edge between pixel dim-1 and the border.
+    EXPECT_DOUBLE_EQ(demdata.getElevationAtPoint(0.0, 3.5), 0.5 * (demdata.get(-1, 3) + demdata.get(0, 3)));
+    EXPECT_DOUBLE_EQ(demdata.getElevationAtPoint(16.0, 3.5), 0.5 * (demdata.get(15, 3) + demdata.get(16, 3)));
+}
+
+TEST(DEMData, ElevationAtPointSharedEdgeAgrees) {
+    PremultipliedImage left = fakeImage({8, 8});
+    PremultipliedImage right = fakeImage({8, 8});
+    DEMData demLeft(left, Tileset::RasterEncoding::Terrarium);
+    DEMData demRight(right, Tileset::RasterEncoding::Terrarium);
+    demLeft.backfillBorder(demRight, 1, 0);
+    demRight.backfillBorder(demLeft, -1, 0);
+    for (double y = 0.5; y <= 6.5; y += 0.5) {
+        EXPECT_DOUBLE_EQ(demLeft.getElevationAtPoint(8.0, y), demRight.getElevationAtPoint(0.0, y)) << "y=" << y;
+    }
+}

@@ -103,3 +103,25 @@ TEST(TerrainStitch, EdgeParameterAndInterpolation) {
     EXPECT_DOUBLE_EQ(interpolateEdge(edge, 0.75), 20.0);
     EXPECT_DOUBLE_EQ(interpolateEdge(edge, 1.0), 30.0);
 }
+
+TEST(TerrainTileManager, GetElevationUsesDemPixelCentres) {
+    // Terrarium: elevation = R * 256 + G + B / 256 - 32768, so R = 128 and G = x gives a ramp with elevation == pixel x.
+    PremultipliedImage image({8, 8});
+    for (uint32_t y = 0; y < 8; ++y) {
+        for (uint32_t x = 0; x < 8; ++x) {
+            auto* pixel = image.data.get() + (y * 8 + x) * 4;
+            pixel[0] = 128;
+            pixel[1] = static_cast<uint8_t>(x);
+            pixel[2] = 0;
+            pixel[3] = 255;
+        }
+    }
+    auto dem = std::make_shared<DEMData>(image, Tileset::RasterEncoding::Terrarium);
+    TestTerrainTileManager manager(nullptr, Tileset{});
+    manager.injected = dem;
+
+    // GL JS places DEM pixel i at tile fraction (i + 0.5) / dim: a point at the centre of pixel 3 reads exactly 3.
+    const double fraction = (3.0 + 0.5) / 8.0;
+    const double lng = -180.0 + (2.0 + fraction) / 4.0 * 360.0; // tile x = 2 at zoom 2
+    EXPECT_NEAR(manager.getElevation({10.0, lng}, 2), 3.0, 1e-6);
+}

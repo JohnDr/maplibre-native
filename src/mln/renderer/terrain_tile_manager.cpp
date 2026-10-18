@@ -68,7 +68,7 @@ double TerrainTileManager::getElevation(const LatLng& latLng, uint8_t zoom) {
     double y;
     tileCoordinate(latLng, zoom, x, y);
     const double dim = static_cast<double>(data->dim);
-    return data->getElevation((x - id.x) * dim, (y - id.y) * dim);
+    return data->getElevationAtPoint((x - id.x) * dim, (y - id.y) * dim);
 }
 
 std::optional<double> TerrainTileManager::sampleElevation(const LatLng& latLng, uint8_t zoom, uint8_t fallbackZoom) {
@@ -85,7 +85,7 @@ std::optional<double> TerrainTileManager::sampleElevation(const LatLng& latLng, 
             double y;
             tileCoordinate(latLng, z, x, y);
             const double dim = static_cast<double>(data->dim);
-            return data->getElevation((x - id.x) * dim, (y - id.y) * dim);
+            return data->getElevationAtPoint((x - id.x) * dim, (y - id.y) * dim);
         }
         if (!isFailed(id)) {
             stillLoading = true;
