@@ -15,6 +15,7 @@
 #include <mln/renderer/layer_tweaker.hpp>
 #include <mln/renderer/paint_parameters.hpp>
 #include <mln/renderer/render_pass.hpp>
+#include <mln/renderer/terrain_stitch.hpp>
 #include <mln/renderer/terrain_tile_manager.hpp>
 #include <mln/renderer/render_sky.hpp>
 #include <mln/renderer/update_parameters.hpp>
@@ -26,6 +27,7 @@
 #include <array>
 #include <cmath>
 #include <numbers>
+#include <set>
 #include <unordered_set>
 
 namespace mln {
@@ -46,48 +48,92 @@ struct TerrainMesh {
     std::vector<uint16_t> indices;
 };
 
+/// The DEM a terrain tile samples: the (coarser) DEM tile and the square of it the terrain tile covers, in DEM pixels.
+/// Null `data` is a tile the source does not have (open sea): flat at sea level, as GL JS treats missing DEM.
+struct TileDem {
+    const DEMData* data = nullptr;
+    double offsetX = 0.0;
+    double offsetY = 0.0;
+    double size = 0.0;
+
+    /// The elevation in metres at (u, v) in 0..1 across the terrain tile.
+    double elevation(double u, double v) const {
+        return data != nullptr ? data->getElevation(offsetX + u * size, offsetY + v * size) : 0.0;
+    }
+};
+
+/// The terrain tile's DEM (see `TileDem`) from the DEM tile `source`, as GL JS's DEM matrix selects it.
+TileDem tileDemFor(const CanonicalTileID& canonical, const std::optional<TerrainTileManager::SourceTile>& source) {
+    TileDem dem;
+    if (source) {
+        const int shift = canonical.z - source->id.z;
+        dem.data = source->data.get();
+        dem.size = static_cast<double>(source->data->dim) / static_cast<double>(1ull << shift);
+        dem.offsetX = static_cast<double>(canonical.x - (source->id.x << shift)) * dem.size;
+        dem.offsetY = static_cast<double>(canonical.y - (source->id.y << shift)) * dem.size;
+    }
+    return dem;
+}
+
+/// The edge of a coarser neighbour this tile's edge is stitched to: the neighbour's edge heights (its mesh vertices,
+/// metres) and where this tile's edge starts and ends along it.
+struct EdgeStitch {
+    std::vector<double> heights;
+    double u0 = 0.0;
+    double u1 = 1.0;
+};
+
 /// Builds a grid over one terrain tile: xy in tile units (0..EXTENT), z the elevation in metres (the camera's
-/// world-to-camera matrix scales z by pixels-per-metre, like every 3D layer). The terrain tile covers the square
-/// `size` DEM pixels wide at (`offsetX`, `offsetY`) of its DEM tile (GL JS samples a sub-rectangle of the coarser DEM
-/// tile the same way). The relief shading comes from the draped hillshade layer, as in GL JS; the mesh carries none.
-TerrainMesh buildTerrainMesh(
-    const DEMData* dem, double offsetX, double offsetY, double size, double exaggeration, const CanonicalTileID& tile) {
-    // A null `dem` is a tile the source does not have (open sea): flat at sea level, as GL JS treats missing DEM.
+/// world-to-camera matrix scales z by pixels-per-metre, like every 3D layer). The relief shading comes from the
+/// draped hillshade layer, as in GL JS; the mesh carries none. Edges that border a coarser tile take their heights
+/// from that tile's mesh edge, so the two meets without a crack (GL JS hides the crack with the skirt only).
+TerrainMesh buildTerrainMesh(const TileDem& dem,
+                             double exaggeration,
+                             const std::array<std::optional<EdgeStitch>, 4>& stitch) {
     const std::size_t n = TerrainGridPoints;
-    // Ground width of this tile at its own latitude.
-    const double tilesAcross = static_cast<double>(1ull << tile.z);
-    const double tileLat = std::atan(std::sinh(std::numbers::pi * (1.0 - 2.0 * (tile.y + 0.5) / tilesAcross)));
-    const double metersPerTile = util::M2PI * util::EARTH_RADIUS_M * std::cos(tileLat) / tilesAcross;
     const double extent = static_cast<double>(util::EXTENT);
 
     std::vector<double> elevation(n * n);
     for (std::size_t j = 0; j < n; j++) {
         for (std::size_t i = 0; i < n; i++) {
-            const double u = static_cast<double>(i) / static_cast<double>(TerrainGridSegments);
-            const double v = static_cast<double>(j) / static_cast<double>(TerrainGridSegments);
-            elevation[j * n + i] = dem != nullptr ? dem->getElevation(offsetX + u * size, offsetY + v * size) : 0.0;
+            elevation[j * n + i] = dem.elevation(static_cast<double>(i) / static_cast<double>(TerrainGridSegments),
+                                                 static_cast<double>(j) / static_cast<double>(TerrainGridSegments));
         }
+    }
+    // Stitched edges. North and south take the corners; west and east keep their own corner vertices out of it.
+    const auto stitched = [&](int side, std::size_t k) {
+        const double t = static_cast<double>(k) / static_cast<double>(TerrainGridSegments);
+        const auto& edge = *stitch[static_cast<std::size_t>(side)];
+        return terrain_stitch::interpolateEdge(edge.heights, edge.u0 + (edge.u1 - edge.u0) * t);
+    };
+    for (std::size_t k = 0; k < n; ++k) {
+        if (stitch[terrain_stitch::North]) elevation[k] = stitched(terrain_stitch::North, k);
+        if (stitch[terrain_stitch::South]) elevation[(n - 1) * n + k] = stitched(terrain_stitch::South, k);
+    }
+    for (std::size_t k = 1; k + 1 < n; ++k) {
+        if (stitch[terrain_stitch::West]) elevation[k * n] = stitched(terrain_stitch::West, k);
+        if (stitch[terrain_stitch::East]) elevation[k * n + (n - 1)] = stitched(terrain_stitch::East, k);
     }
 
     TerrainMesh mesh;
-    mesh.vertices.resize(n * n * 3 * sizeof(float));
+    mesh.vertices.resize(n * n * 4 * sizeof(float));
     auto* out = reinterpret_cast<float*>(mesh.vertices.data());
     for (std::size_t j = 0; j < n; j++) {
         for (std::size_t i = 0; i < n; i++) {
             const double e = elevation[j * n + i];
-            float* vertex = out + (j * n + i) * 3;
+            float* vertex = out + (j * n + i) * 4;
             vertex[0] = static_cast<float>(static_cast<double>(i) / static_cast<double>(TerrainGridSegments) * extent);
             vertex[1] = static_cast<float>(static_cast<double>(j) / static_cast<double>(TerrainGridSegments) * extent);
             vertex[2] = static_cast<float>(e * exaggeration);
+            vertex[3] = 0.0f; // not a skirt vertex
         }
     }
     mesh.vertexCount = n * n;
 
     // Skirt (GL JS `_buildSkirts`): a frame hanging below each edge, so hairline gaps where tiles of different zoom
     // meet (their edge vertices differ) are covered. GL JS uses a fifth of the tile width.
-    const double skirtMeters = metersPerTile / 5.0;
     const std::size_t skirtVertexBase = mesh.vertexCount;
-    mesh.vertices.resize((n * n + 4 * n) * 3 * sizeof(float));
+    mesh.vertices.resize((n * n + 4 * n) * 4 * sizeof(float));
     out = reinterpret_cast<float*>(mesh.vertices.data());
     // Edge vertex indices, per side, in order along the edge.
     const auto edgeIndex = [&](int side, std::size_t k) -> std::size_t {
@@ -100,11 +146,12 @@ TerrainMesh buildTerrainMesh(
     };
     for (int side = 0; side < 4; ++side) {
         for (std::size_t k = 0; k < n; ++k) {
-            const float* src = out + edgeIndex(side, k) * 3;
-            float* dst = out + (skirtVertexBase + static_cast<std::size_t>(side) * n + k) * 3;
+            const float* src = out + edgeIndex(side, k) * 4;
+            float* dst = out + (skirtVertexBase + static_cast<std::size_t>(side) * n + k) * 4;
             dst[0] = src[0];
             dst[1] = src[1];
-            dst[2] = src[2] - static_cast<float>(skirtMeters);
+            dst[2] = src[2];
+            dst[3] = 1.0f; // lowered by the skirt length in the vertex shader (GL JS `u_ele_delta`)
         }
     }
     mesh.vertexCount = n * n + 4 * n;
@@ -185,7 +232,15 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
     // the finer tile and shared edges agree.
     for (const auto& updated : terrain->takeUpdatedTiles()) {
         layerGroup->removeDrawablesIf([&](gfx::Drawable& drawable) {
-            return drawable.getTileID() && terrain->sourceTileFor(drawable.getTileID()->canonical) == updated;
+            if (!drawable.getTileID()) {
+                return false;
+            }
+            if (terrain->sourceTileFor(drawable.getTileID()->canonical) == updated) {
+                return true;
+            }
+            // The mesh also follows the edge of a coarser neighbour it is stitched to.
+            const auto info = stitchInfo.find(*drawable.getTileID());
+            return info != stitchInfo.end() && std::ranges::find(info->second.sources, updated) != info->second.sources.end();
         });
     }
 
@@ -224,15 +279,57 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
     const std::unordered_set<OverscaledTileID> covered(tileCover.begin(), tileCover.end());
     layerGroup->removeDrawablesIf(
         [&](gfx::Drawable& drawable) { return drawable.getTileID() && !covered.contains(*drawable.getTileID()); });
+    for (auto it = stitchInfo.begin(); it != stitchInfo.end();) {
+        it = covered.contains(it->first) ? std::next(it) : stitchInfo.erase(it);
+    }
 
     cover = tileCover;
 
+    std::set<std::tuple<uint8_t, uint32_t, uint32_t>> coveredCanonical;
+    for (const auto& id : tileCover) {
+        coveredCanonical.emplace(id.canonical.z, id.canonical.x, id.canonical.y);
+    }
+    const auto isCovered = [&](const CanonicalTileID& id) { return coveredCanonical.contains({id.z, id.x, id.y}); };
+
     std::unique_ptr<gfx::DrawableBuilder> builder;
     for (const auto& tileID : tileCover) {
-        if (layerGroup->getDrawableCount(RenderPass::Translucent, tileID) > 0) {
-            continue;
-        }
         const auto& canonical = tileID.canonical;
+
+        // Edges that border a coarser tile are stitched to it, so the signature of what the mesh depends on includes
+        // the neighbours and the DEM tiles they currently use: when one of them changes, the mesh is rebuilt.
+        std::array<std::optional<CanonicalTileID>, 4> coarse;
+        std::array<std::optional<TerrainTileManager::SourceTile>, 4> coarseSource;
+        StitchInfo stitchNow;
+        stitchNow.signature = 1469598103934665603ULL;
+        const auto mix = [&](uint64_t value) { stitchNow.signature = (stitchNow.signature ^ value) * 1099511628211ULL; };
+        for (int side = 0; side < 4; ++side) {
+            coarse[side] = terrain_stitch::coarserNeighbour(canonical, side, isCovered);
+            if (!coarse[side]) {
+                continue;
+            }
+            const auto& c = *coarse[side];
+            mix(static_cast<uint64_t>(side) + 1);
+            mix((static_cast<uint64_t>(c.z) << 56) ^ (static_cast<uint64_t>(c.x) << 28) ^ c.y);
+            coarseSource[side] = terrain->getSourceTile(c);
+            if (coarseSource[side]) {
+                const auto& id = coarseSource[side]->id;
+                mix((static_cast<uint64_t>(id.z) << 56) ^ (static_cast<uint64_t>(id.x) << 28) ^ id.y);
+            } else {
+                mix(~0ULL);
+            }
+            if (const auto ideal = terrain->sourceTileFor(c)) {
+                stitchNow.sources.push_back(*ideal);
+            }
+        }
+
+        if (layerGroup->getDrawableCount(RenderPass::Translucent, tileID) > 0) {
+            const auto info = stitchInfo.find(tileID);
+            if (info != stitchInfo.end() && info->second.signature == stitchNow.signature) {
+                continue;
+            }
+            layerGroup->removeDrawablesIf(
+                [&](gfx::Drawable& drawable) { return drawable.getTileID() && *drawable.getTileID() == tileID; });
+        }
         const auto source = terrain->getSourceTile(canonical);
         if (!source && !terrain->isMissing(canonical)) {
             continue; // still loading
@@ -251,26 +348,34 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             builder->setVertexAttrId(shaders::idTerrainPosVertexAttribute);
         }
 
-        // The terrain tile is a square of the (coarser) DEM tile it samples, as GL JS's DEM matrix selects.
-        double offsetX = 0.0;
-        double offsetY = 0.0;
-        double sampleSize = 0.0;
-        if (source) {
-            const int shift = canonical.z - source->id.z;
-            const double dim = static_cast<double>(source->data->dim);
-            sampleSize = dim / static_cast<double>(1ull << shift);
-            offsetX = static_cast<double>(canonical.x - (source->id.x << shift)) * sampleSize;
-            offsetY = static_cast<double>(canonical.y - (source->id.y << shift)) * sampleSize;
+        // The mesh samples its square of the (coarser) DEM tile, and follows the edge of coarser neighbours.
+        std::array<std::optional<EdgeStitch>, 4> stitch;
+        for (int side = 0; side < 4; ++side) {
+            if (!coarse[side] || (!coarseSource[side] && !terrain->isMissing(*coarse[side]))) {
+                continue; // no neighbour mesh yet (still loading)
+            }
+            const TileDem neighbourDem = tileDemFor(*coarse[side], coarseSource[side]);
+            EdgeStitch edge;
+            edge.heights.resize(TerrainGridPoints);
+            for (std::size_t k = 0; k < TerrainGridPoints; ++k) {
+                const double p = static_cast<double>(k) / static_cast<double>(TerrainGridSegments);
+                // The neighbour's facing edge: its south edge for our north edge, and so on.
+                switch (side) {
+                    case terrain_stitch::North: edge.heights[k] = neighbourDem.elevation(p, 1.0); break;
+                    case terrain_stitch::South: edge.heights[k] = neighbourDem.elevation(p, 0.0); break;
+                    case terrain_stitch::West: edge.heights[k] = neighbourDem.elevation(1.0, p); break;
+                    default: edge.heights[k] = neighbourDem.elevation(0.0, p); break;
+                }
+            }
+            edge.u0 = terrain_stitch::coarseEdgeParameter(canonical, *coarse[side], side, 0.0);
+            edge.u1 = terrain_stitch::coarseEdgeParameter(canonical, *coarse[side], side, 1.0);
+            stitch[static_cast<std::size_t>(side)] = std::move(edge);
         }
-        auto mesh = buildTerrainMesh(source ? source->data.get() : nullptr,
-                                     offsetX,
-                                     offsetY,
-                                     sampleSize,
-                                     updateParameters.terrainExaggeration,
-                                     canonical);
+        stitchInfo[tileID] = std::move(stitchNow);
+        auto mesh = buildTerrainMesh(tileDemFor(canonical, source), updateParameters.terrainExaggeration, stitch);
         const auto vertexCount = mesh.vertexCount;
         const auto indexCount = mesh.indices.size();
-        builder->setRawVertices(std::move(mesh.vertices), vertexCount, gfx::AttributeDataType::Float3);
+        builder->setRawVertices(std::move(mesh.vertices), vertexCount, gfx::AttributeDataType::Float4);
         SegmentVector segments;
         segments.emplace_back(0, 0, vertexCount, indexCount);
         builder->setSegments(gfx::Triangles(), std::move(mesh.indices), segments.data(), segments.size());
@@ -319,7 +424,10 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
         static_assert(sizeof(TerrainFogUBO) == 4 * 16);
         TerrainFogUBO fogUBO{};
         fogUBO.params = {1.0f, 0.0f, 1.0f, 0.0f};
-        fogUBO.depthRange = {1.0f, 2.0f, 0.0f, 0.0f};
+        // GL JS `Terrain#getSkirtLength(zoom)`: a fifth of the tile width at the map zoom, in metres at the equator.
+        const auto skirtLength = static_cast<float>(util::M2PI * util::EARTH_RADIUS_M /
+                                                    std::pow(2.0, std::max(state.getZoom(), 0.0)) / 5.0);
+        fogUBO.depthRange = {1.0f, 2.0f, skirtLength, 0.0f};
         double nearDistance = 1.0;
         double farDistance = 2.0;
         if (evaluatedSky != nullptr && !globeShader && state.getFogDepthRange(nearDistance, farDistance)) {
@@ -329,7 +437,7 @@ void TerrainPass::update(gfx::ShaderRegistry& shaders,
             fogUBO.fogColor = {sky.fogColor.r, sky.fogColor.g, sky.fogColor.b, sky.fogColor.a};
             fogUBO.horizonColor = {sky.horizonColor.r, sky.horizonColor.g, sky.horizonColor.b, sky.horizonColor.a};
             fogUBO.params = {sky.fogGroundBlend, static_cast<float>(opacity), sky.horizonFogBlend, 0.0f};
-            fogUBO.depthRange = {static_cast<float>(nearDistance), static_cast<float>(farDistance), 0.0f, 0.0f};
+            fogUBO.depthRange = {static_cast<float>(nearDistance), static_cast<float>(farDistance), skirtLength, 0.0f};
         }
         if (!fogUniformBuffer) {
             fogUniformBuffer = context.createUniformBuffer(&fogUBO, sizeof(fogUBO), false, false);

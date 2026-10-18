@@ -1,6 +1,7 @@
 #include <mln/test/util.hpp>
 
 #include <mln/geometry/dem_data.hpp>
+#include <mln/renderer/terrain_stitch.hpp>
 #include <mln/renderer/terrain_tile_manager.hpp>
 #include <mln/util/image.hpp>
 #include <mln/util/tileset.hpp>
@@ -68,4 +69,37 @@ TEST(TerrainTileManager, SourceTileIsOneZoomCoarserAndCapped) {
     EXPECT_TRUE(manager.sourceTileFor({16, 100, 200}) == CanonicalTileID(12, 100 >> 4, 200 >> 4));
     // Below the source's minimum zoom there is none.
     EXPECT_FALSE(manager.sourceTileFor({1, 0, 0}).has_value());
+}
+
+TEST(TerrainStitch, CoarserNeighbour) {
+    using namespace terrain_stitch;
+    // Tile 14/7964/5044 has a same-zoom west neighbour and a coarser (z13) north one.
+    const auto covered = [](const CanonicalTileID& id) {
+        return (id.z == 14 && id.x == 7963 && id.y == 5044) || (id.z == 13 && id.x == 3982 && id.y == 2521) ||
+               (id.z == 14 && id.x == 7964 && id.y == 5044);
+    };
+    const CanonicalTileID tile(14, 7964, 5044);
+    EXPECT_FALSE(coarserNeighbour(tile, West, covered).has_value());  // same zoom
+    EXPECT_FALSE(coarserNeighbour(tile, East, covered).has_value());  // not covered (finer or off screen)
+    const auto north = coarserNeighbour(tile, North, covered);
+    ASSERT_TRUE(north.has_value());
+    EXPECT_TRUE(*north == CanonicalTileID(13, 3982, 2521)); // (7964, 5043) >> 1
+    // Off the world edge: nothing.
+    EXPECT_FALSE(coarserNeighbour(CanonicalTileID(3, 0, 0), North, covered).has_value());
+}
+
+TEST(TerrainStitch, EdgeParameterAndInterpolation) {
+    using namespace terrain_stitch;
+    // A z14 tile that is the right half of its z13 parent along x: its edge spans u = 0.5 .. 1.
+    const CanonicalTileID fine(14, 7965, 5045);
+    const CanonicalTileID coarse(13, 3982, 2522);
+    EXPECT_DOUBLE_EQ(coarseEdgeParameter(fine, coarse, North, 0.0), 0.5);
+    EXPECT_DOUBLE_EQ(coarseEdgeParameter(fine, coarse, North, 1.0), 1.0);
+    EXPECT_DOUBLE_EQ(coarseEdgeParameter(fine, coarse, North, 0.5), 0.75);
+    // The coarse mesh edge is the line between its vertices.
+    const std::vector<double> edge{0.0, 10.0, 30.0};
+    EXPECT_DOUBLE_EQ(interpolateEdge(edge, 0.0), 0.0);
+    EXPECT_DOUBLE_EQ(interpolateEdge(edge, 0.25), 5.0);
+    EXPECT_DOUBLE_EQ(interpolateEdge(edge, 0.75), 20.0);
+    EXPECT_DOUBLE_EQ(interpolateEdge(edge, 1.0), 30.0);
 }

@@ -264,7 +264,20 @@ void TransformState::getProjMatrix(mat4& projMatrix, uint16_t nearZ, bool aligne
     // Calculate z distance of the farthest fragment that should be rendered.
     const double furthestDistance = cameraToSeaLevelDistance / (1 - tanMultiple);
     // Add a bit extra to avoid precision problems when a fragment's distance is exactly `furthestDistance`
-    const double farZ = furthestDistance * 1.01;
+    double farZ = furthestDistance * 1.01;
+
+    // With terrain, GL JS (`_calculateNearFarZ`, `nearZ = height / 50`) derives the planes from the lowest terrain point
+    // and the horizon; the fog uses the same far plane.
+    if (tileElevationRange != nullptr) {
+        double fogNear = 0.0;
+        double fogFar = 0.0;
+        if (getFogDepthRange(fogNear, fogFar)) {
+            farZ = fogFar;
+            if (nearZ == 1) {
+                nearZ = static_cast<uint16_t>(std::max(1.0, std::floor(size.height / 50.0)));
+            }
+        }
+    }
 
     // Make sure the camera state is up-to-date
     updateCameraState();

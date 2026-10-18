@@ -25,8 +25,8 @@ struct ShaderSource<BuiltIn::TerrainShader, gfx::Backend::Type::Vulkan> {
 )";
     static constexpr auto vertex = R"(
 
-// xy: tile units (0..EXTENT); z: elevation in metres.
-layout(location = 0) in vec3 in_position;
+// xy: tile units (0..EXTENT); z: elevation in metres; w: 1 for skirt vertices, which hang `skirt_length` below.
+layout(location = 0) in vec4 in_position;
 
 layout(push_constant) uniform Constants {
     int ubo_index;
@@ -40,14 +40,14 @@ layout(set = LAYER_SET_INDEX, binding = idTerrainFogUBO) uniform TerrainFogUBO {
     vec4 fog_color;      // premultiplied
     vec4 horizon_color;  // premultiplied
     vec4 params;         // x: fog-ground-blend, y: fog opacity (0 = off), z: horizon-fog-blend
-    vec4 depth_range;    // x: near, y: far (fog depth range, in the projection's eye-space units)
+    vec4 depth_range;    // x: near, y: far (fog depth range, in the projection's eye-space units), z: skirt length (m)
 } fog;
 
 layout(location = 0) out vec2 v_uv;
 layout(location = 1) out float v_fog_depth;
 
 void main() {
-    gl_Position = projectTileFor3D(in_position.xy, in_position.z, projectionVector.projection_ubo[constant.ubo_index]);
+    gl_Position = projectTileFor3D(in_position.xy, in_position.z - in_position.w * fog.depth_range.z, projectionVector.projection_ubo[constant.ubo_index]);
     applySurfaceTransform();
     // GL JS `v_fog_depth`: the depth of this vertex in a projection whose near plane is the camera-to-sea-level
     // distance (terrain.vertex.glsl), in [0, 1]. For a perspective projection that is f*(d - n) / ((f - n)*d), with

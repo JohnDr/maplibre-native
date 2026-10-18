@@ -104,7 +104,12 @@ void TilePyramid::update(const std::vector<Immutable<style::LayerProperties>>& l
 
     const auto type = sourceImpl.type;
     // Determine the overzooming/underzooming amounts and required tiles.
+    // With terrain GL JS rounds the zoom of raster-dem sources like raster ones (`roundZoom` is true for both).
+    const bool terrain = parameters.transformState.getTileElevationRange() != nullptr;
     int32_t overscaledZoom = util::coveringZoomLevel(zoom, type, tileSize);
+    if (terrain && type == SourceType::RasterDEM) {
+        overscaledZoom = static_cast<int32_t>(std::round(zoom + std::log2(512.0 / tileSize)));
+    }
     int32_t tileZoom = overscaledZoom;
     int32_t panZoom = zoomRange.max;
 
@@ -121,7 +126,11 @@ void TilePyramid::update(const std::vector<Immutable<style::LayerProperties>>& l
                                                      .tileLodScale = parameters.tileLodScale,
                                                      .tileLodPitchThreshold = parameters.tileLodPitchThreshold,
                                                      .tileLodMode = parameters.tileLodMode,
-                                                     .terrainVariableZoom = true}; // with terrain, as GL JS does
+                                                     .terrainVariableZoom = true, // with terrain, as GL JS does
+                                                     .roundZoom = type == SourceType::Raster ||
+                                                                  type == SourceType::RasterDEM ||
+                                                                  type == SourceType::Video,
+                                                     .centerZoomShift = std::log2(512.0 / tileSize)};
 
     if (std::cmp_greater_equal(overscaledZoom, zoomRange.min)) {
         int32_t idealZoom = std::min<int32_t>(zoomRange.max, overscaledZoom);

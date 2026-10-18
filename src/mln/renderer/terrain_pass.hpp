@@ -66,6 +66,12 @@ private:
     std::shared_ptr<TerrainTileManager> terrain;
     std::optional<Tileset> tileset;
     std::function<void()> onTileLoaded;
+    /// What a tile's mesh depends on beyond its own DEM: the coarser neighbours its edges are stitched to.
+    struct StitchInfo {
+        uint64_t signature = 0;
+        std::vector<CanonicalTileID> sources; // the DEM tiles those neighbours sample
+    };
+    std::map<OverscaledTileID, StitchInfo> stitchInfo;
     uint8_t demZoom = 0; // the terrain tile cover zoom (its DEM tiles are one zoom coarser, GL JS deltaZoom)
     uint16_t tileSize = 512;
     double builtZoom = -1;

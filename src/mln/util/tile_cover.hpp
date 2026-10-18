@@ -44,6 +44,13 @@ struct TileCoverParameters {
     /// the camera, as GL JS does (`allowVariableZoom` is true with terrain), so a pitched view does not need thousands
     /// of tiles of one zoom out to the horizon. Needs a zoom range wider than a single level.
     bool terrainVariableZoom = false;
+    /// With terrain, round each tile's zoom instead of flooring it (GL JS `roundZoom`: true for raster and raster-dem
+    /// sources, false for the terrain's own tiles).
+    bool roundZoom = false;
+    /// With terrain, how much finer the centre zoom handed to the tile-zoom function is than the map zoom:
+    /// `log2(512 / tile size)` (GL JS `transform.zoom + scaleZoom(transform.tileSize / options.tileSize)`). Unset: the
+    /// distance between the cover's zoom and the floor of the map zoom.
+    std::optional<double> centerZoomShift;
 };
 
 int32_t coveringZoomLevel(double z, style::SourceType type, uint16_t tileSize) noexcept;

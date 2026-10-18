@@ -711,7 +711,8 @@ std::vector<OverscaledTileID> tileCover(const TileCoverParameters& state,
     // the camera-to-centre distance (the centre sits on the terrain, at the centre elevation).
     const globe::TileZoomConstants terrainZoomConstants(transform.getFieldOfView() * 180.0 / std::numbers::pi);
     const double terrainFovDegrees = transform.getFieldOfView() * 180.0 / std::numbers::pi;
-    const double terrainCenterZoom = transform.getZoom() + (z - std::floor(transform.getZoom()));
+    const double terrainCenterZoom = transform.getZoom() +
+                                     (state.centerZoomShift ? *state.centerZoomShift : (z - std::floor(transform.getZoom())));
     const double terrainDistanceZ = std::max(std::abs(cameraCoord[2] - centerElevation * metersToTileUnits), 1e-9);
     // The centre is the map's lat/lng at the centre elevation (GL JS `worldFromLngLat(center, elevation)`), not the
     // screen-centre ray hit on sea level, which lies kilometres away at high pitch when the centre is elevated.
@@ -749,12 +750,13 @@ std::vector<OverscaledTileID> tileCover(const TileCoverParameters& state,
         bool shouldSplitTile;
         if (terrainLod) {
             const vec3 toTile = node.aabb.distanceXYZ(cameraCoord);
-            const double desired = std::floor(globe::calculateTileZoom(terrainZoomConstants,
+            const double tileZoomValue = globe::calculateTileZoom(terrainZoomConstants,
                                                                        terrainCenterZoom,
                                                                        std::hypot(toTile[0], toTile[1]),
                                                                        terrainDistanceZ,
                                                                        terrainDistanceToCenter3d,
-                                                                       terrainFovDegrees));
+                                                                       terrainFovDegrees);
+            const double desired = state.roundZoom ? std::round(tileZoomValue) : std::floor(tileZoomValue);
             const auto targetZoom = static_cast<uint8_t>(std::clamp(desired, 0.0, static_cast<double>(maxZoom)));
             shouldSplitTile = node.zoom < targetZoom;
         } else if (state.tileLodMode == TileLodMode::Distance) {
