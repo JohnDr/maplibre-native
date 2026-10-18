@@ -1212,6 +1212,13 @@ void RenderOrchestrator::updateLayers(gfx::ShaderRegistry& shaders,
                                                     gfx::TextureChannelDataType::UnsignedByte);
                     if (rt) {
                         rt->setClearColor(Color{0.0f, 0.0f, 0.0f, 0.0f}); // transparent: unrendered != black imagery
+                        // GL JS `acquireRTT`: LINEAR_MIPMAP_LINEAR with the device's maximum anisotropy (clamped to
+                        // 16 here), the mips regenerated after each render (the backend does that when the pass ends).
+                        rt->getTexture()->setSamplerConfiguration({.filter = gfx::TextureFilterType::Linear,
+                                                                   .wrapU = gfx::TextureWrapType::Clamp,
+                                                                   .wrapV = gfx::TextureWrapType::Clamp,
+                                                                   .maxAnisotropy = 16,
+                                                                   .mipmapped = true});
                     }
                 }
                 if (!rt) {

@@ -100,6 +100,9 @@ void RenderRasterDEMSource::onTileChanged(Tile& tile) {
                     const DEMTileNeighbors& borderMask = opposites[mask];
                     if ((borderTile.neighboringTiles & borderMask) != borderMask) {
                         borderTile.backfillBorder(demtile, borderMask);
+                        // Its hillshade is prepared again with the new border: tell the observers (the terrain drape
+                        // re-renders the tiles it is drawn into).
+                        RenderTileSource::onTileChanged(borderTile);
                     }
                 }
             }

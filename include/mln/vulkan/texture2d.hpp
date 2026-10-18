@@ -84,6 +84,14 @@ public:
     const vk::ImageLayout& getVulkanImageLayout() const { return imageLayout; }
     const vk::UniqueImageView& getVulkanImageView() const { return imageAllocation->imageView; }
     const vk::Image& getVulkanImage() const { return imageAllocation->image; }
+
+    /// A view of mip level 0 only: a framebuffer attachment must have a single level, while the texture's own view
+    /// spans all levels when it is mipmapped.
+    vk::UniqueImageView createLevel0View() const;
+
+    /// Fill mip levels 1.. of a mipmapped attachment texture from level 0, which the render pass left in shader-read
+    /// layout (GL JS `obj.texture.generateMipmap()` after each render-to-texture pass). Call outside a render pass.
+    void generateAttachmentMips(const vk::UniqueCommandBuffer& buffer);
     const vk::Sampler& getVulkanSampler();
 
     void copyImage(vk::Image image, Size imageSize, uint16_t xOffset = 0, uint16_t yOffset = 0);

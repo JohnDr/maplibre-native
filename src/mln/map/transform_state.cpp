@@ -181,20 +181,60 @@ bool TransformState::getFogDepthRange(double& nearDistance, double& farDistance)
     if (size.isEmpty()) {
         return false;
     }
+    // GL JS `MercatorTransform#_calcMatrices` / `_calculateNearFarZ` (mercator_transform.ts): the fog matrix uses the
+    // camera-to-sea-level distance as its near plane and the far plane GL JS computes for its projection, which is
+    // set by the lowest terrain point and the horizon rather than by the sea-level plane alone.
     const double cameraToCenterDistance = getCameraToCenterDistance();
     const ScreenCoordinate offset = getCenterOffset();
-    const double limitedPitch = util::clamp(getPitch(), 0.0, maxMercatorHorizonAngle);
+    const double pitch = getPitch();
+    const double limitedPitch = util::clamp(pitch, 0.0, maxMercatorHorizonAngle);
+    const double pixelsPerMeter = 1.0 / Projection::getMetersPerPixelAtLatitude(getLatLng().latitude(), getZoom());
+    const double elevation = getElevation();
 
-    // Far plane: as in getProjMatrix.
-    const double seaLevelDistance = cameraToCenterDistance + std::abs(z) / std::cos(limitedPitch);
-    const double tanFovAboveCenter = (0.5 + (offset.y - frustumOffset.top()) / size.height) * 2.0 *
-                                     std::tan(fov / 2.0) *
-                                     (std::abs(std::cos(roll)) + std::abs(std::sin(roll)) * size.width / size.height);
-    const double tanMultiple = util::clamp(tanFovAboveCenter * std::tan(limitedPitch), 0.0, 0.99);
-    farDistance = seaLevelDistance / (1 - tanMultiple) * 1.01;
+    const double cameraToSeaLevelDistance = std::max(
+        cameraToCenterDistance / 2.0, cameraToCenterDistance + elevation * pixelsPerMeter / std::cos(limitedPitch));
+    nearDistance = cameraToSeaLevelDistance;
 
-    // Near plane: GL JS `cameraToSeaLevelDistance` of the fog matrix (mercator_transform.ts `_calcMatrices`).
-    nearDistance = std::max(cameraToCenterDistance / 2.0, cameraToCenterDistance + z / std::cos(limitedPitch));
+    // The lowest elevation to account for: the centre, the terrain tile under it (its DEM minimum, as
+    // `Terrain#getMinTileElevationForLngLatZoom`), and a point 100 m below the camera.
+    double minElevationForCurrentTile = 0.0;
+    if (tileElevationRange) {
+        const auto tileZoom = static_cast<uint8_t>(util::clamp(std::floor(getZoom()), 0.0, 22.0));
+        const LatLng latLng = getLatLng();
+        const double tiles = std::ldexp(1.0, tileZoom);
+        const double lat = util::clamp(latLng.latitude(), -util::LATITUDE_MAX, util::LATITUDE_MAX);
+        const double tileX = std::floor((latLng.longitude() + 180.0) / 360.0 * tiles);
+        const double tileY = std::floor((0.5 - std::log(std::tan(pi / 4.0 + util::deg2rad(lat) / 2.0)) / (2.0 * pi)) * tiles);
+        const double maxIndex = tiles - 1.0;
+        if (const auto range = (*tileElevationRange)(CanonicalTileID(tileZoom,
+                                                                     static_cast<uint32_t>(util::clamp(tileX, 0.0, maxIndex)),
+                                                                     static_cast<uint32_t>(util::clamp(tileY, 0.0, maxIndex))))) {
+            minElevationForCurrentTile = range->first;
+        }
+    }
+    constexpr double minRenderDistanceBelowCameraInMeters = 100.0;
+    const double minElevation = std::min({elevation, minElevationForCurrentTile, getCameraAltitude() - minRenderDistanceBelowCameraInMeters});
+    const double cameraToLowestPointDistance = cameraToSeaLevelDistance - minElevation * pixelsPerMeter / std::cos(limitedPitch);
+    const double lowestPlane = minElevation < 0 ? cameraToLowestPointDistance : cameraToSeaLevelDistance;
+
+    // Distance, along the view ray, from the centre to the top edge of the screen and to the horizon (law of sines).
+    const double groundAngle = pi / 2.0 + pitch;
+    const double zfov = fov * (std::abs(std::cos(roll)) * size.height + std::abs(std::sin(roll)) * size.width) / size.height;
+    const double fovAboveCenter = zfov * (0.5 + offset.y / size.height);
+    const double topHalfSurfaceDistance = std::sin(fovAboveCenter) * lowestPlane /
+                                          std::sin(util::clamp(pi - groundAngle - fovAboveCenter, 0.01, pi - 0.01));
+
+    // GL JS `getMercatorHorizon`: the horizon above the centre in pixels.
+    const double horizon = cameraToCenterDistance * std::min(std::tan(pi / 2.0 - pitch) * 0.85, std::tan(maxMercatorHorizonAngle - pitch));
+    const double horizonAngle = std::atan(horizon / cameraToCenterDistance);
+    const double minFovCenterToHorizon = pi / 2.0 - maxMercatorHorizonAngle;
+    const double fovCenterToHorizon = horizonAngle > minFovCenterToHorizon ? 2.0 * horizonAngle * (0.5 + offset.y / (horizon * 2.0))
+                                                                           : minFovCenterToHorizon;
+    const double topHalfSurfaceDistanceHorizon = std::sin(fovCenterToHorizon) * lowestPlane /
+                                                 std::sin(util::clamp(pi - groundAngle - fovCenterToHorizon, 0.01, pi - 0.01));
+
+    const double topHalfMinDistance = std::min(topHalfSurfaceDistance, topHalfSurfaceDistanceHorizon);
+    farDistance = (std::cos(pi / 2.0 - limitedPitch) * topHalfMinDistance + lowestPlane) * 1.01;
     return true;
 }
 

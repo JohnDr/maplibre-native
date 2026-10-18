@@ -21,6 +21,9 @@ public:
         // explicitly can override this method.
     }
 
+    /// Called after the renderable's render pass has ended and before it is sampled or presented, outside any pass.
+    virtual void finishRender([[maybe_unused]] const vk::UniqueCommandBuffer& buffer) {}
+
     const vk::Extent2D& getExtent() const { return extent; }
     const vk::UniqueRenderPass& getRenderPass() const { return renderPass; }
     virtual const vk::UniqueFramebuffer& getFramebuffer() const = 0;

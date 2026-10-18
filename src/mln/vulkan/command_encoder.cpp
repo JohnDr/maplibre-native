@@ -25,7 +25,9 @@ std::unique_ptr<gfx::RenderPass> CommandEncoder::createRenderPass(const char* na
 }
 
 void CommandEncoder::present(gfx::Renderable& renderable) {
-    renderable.getResource<RenderableResource>().swap();
+    auto& resource = renderable.getResource<RenderableResource>();
+    resource.finishRender(commandBuffer);
+    resource.swap();
 }
 
 void CommandEncoder::pushDebugGroup(const char* name) {

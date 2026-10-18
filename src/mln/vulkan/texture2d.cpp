@@ -308,6 +308,10 @@ void Texture2D::createTexture() {
             imageUsage = vk::ImageUsageFlags() | vk::ImageUsageFlagBits::eColorAttachment |
                          vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc;
             imageTiling = vk::ImageTiling::eOptimal;
+
+            if (samplerState.mipmapped) {
+                imageUsage |= vk::ImageUsageFlagBits::eTransferDst; // the mip chain is blitted into
+            }
             break;
 
         case Texture2DUsage::Read:
@@ -765,6 +769,109 @@ std::shared_ptr<PremultipliedImage> Texture2D::readImage() {
         assert(false);
         return imageData;
     }
+}
+
+vk::UniqueImageView Texture2D::createLevel0View() const {
+    const auto createInfo = vk::ImageViewCreateInfo()
+                                .setImage(imageAllocation->image)
+                                .setViewType(vk::ImageViewType::e2D)
+                                .setFormat(vulkanFormat(pixelFormat, channelType))
+                                .setSubresourceRange({vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+    return context.getBackend().getDevice()->createImageViewUnique(
+        createInfo, nullptr, context.getBackend().getDispatcher());
+}
+
+void Texture2D::generateAttachmentMips(const vk::UniqueCommandBuffer& buffer) {
+    const uint32_t mipLevels = getMipLevels();
+    if (mipLevels <= 1 || !imageAllocation) {
+        return;
+    }
+    const auto& dispatcher = context.getBackend().getDispatcher();
+    const auto image = imageAllocation->image;
+
+    // Level 0: the render pass left it readable by shaders. Levels 1..: nothing to keep, write them. The execution
+    // dependency also waits for earlier frames that sampled the old mips.
+    const auto prepare = [&](uint32_t baseLevel, uint32_t levelCount, vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
+                             vk::AccessFlags srcAccess, vk::AccessFlags dstAccess) {
+        const auto barrier = vk::ImageMemoryBarrier()
+                                 .setImage(image)
+                                 .setOldLayout(oldLayout)
+                                 .setNewLayout(newLayout)
+                                 .setSrcAccessMask(srcAccess)
+                                 .setDstAccessMask(dstAccess)
+                                 .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                                 .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                                 .setSubresourceRange({vk::ImageAspectFlagBits::eColor, baseLevel, levelCount, 0, 1});
+        buffer->pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                                    vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eTransfer,
+                                vk::PipelineStageFlagBits::eTransfer,
+                                {},
+                                nullptr,
+                                nullptr,
+                                barrier,
+                                dispatcher);
+    };
+    prepare(0,
+            1,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eTransferSrcOptimal,
+            vk::AccessFlagBits::eColorAttachmentWrite,
+            vk::AccessFlagBits::eTransferRead);
+    prepare(1,
+            mipLevels - 1,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eTransferDstOptimal,
+            vk::AccessFlags(),
+            vk::AccessFlagBits::eTransferWrite);
+
+    int32_t mipWidth = size.width;
+    int32_t mipHeight = size.height;
+    for (uint32_t i = 1; i < mipLevels; ++i) {
+        const int32_t nextMipWidth = std::max(1, mipWidth / 2);
+        const int32_t nextMipHeight = std::max(1, mipHeight / 2);
+
+        const auto blit = vk::ImageBlit()
+                              .setSrcOffsets({vk::Offset3D{0, 0, 0}, {mipWidth, mipHeight, 1}})
+                              .setDstOffsets({vk::Offset3D{0, 0, 0}, {nextMipWidth, nextMipHeight, 1}})
+                              .setSrcSubresource({vk::ImageAspectFlagBits::eColor, i - 1, 0, 1})
+                              .setDstSubresource({vk::ImageAspectFlagBits::eColor, i, 0, 1});
+        buffer->blitImage(image,
+                          vk::ImageLayout::eTransferSrcOptimal,
+                          image,
+                          vk::ImageLayout::eTransferDstOptimal,
+                          blit,
+                          vk::Filter::eLinear,
+                          dispatcher);
+
+        // This level is the source of the next one.
+        prepare(i,
+                1,
+                vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageLayout::eTransferSrcOptimal,
+                vk::AccessFlagBits::eTransferWrite,
+                vk::AccessFlagBits::eTransferRead);
+        mipWidth = nextMipWidth;
+        mipHeight = nextMipHeight;
+    }
+
+    // Every level is now a transfer source; hand the whole chain to the fragment shaders.
+    const auto toShader = vk::ImageMemoryBarrier()
+                              .setImage(image)
+                              .setOldLayout(vk::ImageLayout::eTransferSrcOptimal)
+                              .setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                              .setSrcAccessMask(vk::AccessFlagBits::eTransferRead)
+                              .setDstAccessMask(vk::AccessFlagBits::eShaderRead)
+                              .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                              .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                              .setSubresourceRange({vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, 1});
+    buffer->pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                            vk::PipelineStageFlagBits::eFragmentShader,
+                            {},
+                            nullptr,
+                            nullptr,
+                            toShader,
+                            dispatcher);
+    imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 }
 
 uint32_t Texture2D::getMipLevels() const {

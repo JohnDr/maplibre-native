@@ -32,10 +32,17 @@ public:
 
     ~OffscreenTextureResource() noexcept override {
         framebuffer.reset();
+        attachmentView.reset();
         renderPass.reset();
         colorTexture.reset();
 
         backend.getContext().renderingStats().numFrameBuffers--;
+    }
+
+    void finishRender(const vk::UniqueCommandBuffer& buffer) override {
+        if (colorTexture) {
+            static_cast<Texture2D&>(*colorTexture).generateAttachmentMips(buffer);
+        }
     }
 
     void bind() override {
@@ -64,6 +71,8 @@ public:
 
         assert(colorTexture);
         auto& texture = static_cast<Texture2D&>(*colorTexture);
+        // The texture's own view spans every mip level; a framebuffer attachment is one level.
+        attachmentView = texture.createLevel0View();
 
         const auto colorAttachment = vk::AttachmentDescription(vk::AttachmentDescriptionFlags())
                                          .setFormat(texture.getVulkanFormat())
@@ -110,7 +119,7 @@ public:
 
         const auto framebufferCreateInfo = vk::FramebufferCreateInfo()
                                                .setRenderPass(renderPass.get())
-                                               .setAttachments(texture.getVulkanImageView().get())
+                                               .setAttachments(attachmentView.get())
                                                .setAttachmentCount(1)
                                                .setWidth(extent.width)
                                                .setHeight(extent.height)
@@ -125,6 +134,7 @@ private:
     const gfx::TextureChannelDataType type;
 
     gfx::Texture2DPtr colorTexture;
+    vk::UniqueImageView attachmentView;
     vk::UniqueFramebuffer framebuffer;
 };
 
