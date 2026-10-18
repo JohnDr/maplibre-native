@@ -153,3 +153,31 @@ TEST(BoundingVolumes, AabbIntersectsFrustumEdgeCase) {
     EXPECT_EQ(frustum.intersects(aabb), util::IntersectionResult::Intersects);
     EXPECT_EQ(frustum.intersectsPrecise(aabb), util::IntersectionResult::Separate);
 }
+
+// Tile bounding boxes carry an elevation range in z (GL JS getTileBoundingVolume): the frustum test must use it.
+TEST(BoundingVolumes, ElevatedAabbSeparateWhenEntirelyOutsideDepth) {
+    const util::Frustum frustum = createTestFrustum(pi / 2, 1.0, 0.1, 100.0, -5.0, 0.0);
+    // Far below the far plane (the flat footprint is inside the frustum's xy at z = 0).
+    EXPECT_EQ(frustum.intersects(util::AABB({-1, -1, -500}, {1, 1, -400})), util::IntersectionResult::Separate);
+}
+
+TEST(BoundingVolumes, ElevatedAabbIntersectsWhenItsRangeReachesIntoTheFrustum) {
+    const util::Frustum frustum = createTestFrustum(pi / 2, 1.0, 0.1, 100.0, -5.0, 0.0);
+    const util::AABB flat({-1, -1, -500}, {1, 1, -500});
+    const util::AABB tall({-1, -1, -500}, {1, 1, 0});
+    EXPECT_EQ(frustum.intersects(flat), util::IntersectionResult::Separate);
+    EXPECT_NE(frustum.intersects(tall), util::IntersectionResult::Separate);
+    EXPECT_NE(frustum.intersectsPrecise(tall), util::IntersectionResult::Separate);
+}
+
+TEST(BoundingVolumes, ElevatedAabbAboveTheCameraIsSeparateUntilItsRangeDropsBelowIt) {
+    // The camera sits at z = 5 looking down. Terrain that is entirely above it is behind the near plane.
+    const util::Frustum frustum = createTestFrustum(pi / 2, 1.0, 0.1, 100.0, -5.0, 0.0);
+    EXPECT_EQ(frustum.intersects(util::AABB({-1, -1, 10}, {1, 1, 20})), util::IntersectionResult::Separate);
+    EXPECT_NE(frustum.intersects(util::AABB({-1, -1, 0}, {1, 1, 20})), util::IntersectionResult::Separate);
+}
+
+TEST(BoundingVolumes, ElevatedAabbFullyInsideIsContained) {
+    const util::Frustum frustum = createTestFrustum(pi / 2, 1.0, 0.1, 100.0, -5.0, 0.0);
+    EXPECT_EQ(frustum.intersects(util::AABB({-1, -1, -1}, {1, 1, 1})), util::IntersectionResult::Contains);
+}

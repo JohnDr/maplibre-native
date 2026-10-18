@@ -1,6 +1,7 @@
 #include <mln/util/tile_cover.hpp>
 #include <mln/util/geo.hpp>
 #include <mln/map/transform.hpp>
+#include <mln/util/tile_coordinate.hpp>
 #include <mln/style/projection_definition.hpp>
 #include <mln/math/angles.hpp>
 
@@ -732,4 +733,195 @@ TEST(TileCover, GlobeZoomZeroIsTheWholePlanet) {
     transform.setProjectionDefinition(ProjectionDefinition("vertical-perspective"));
     transform.jumpTo(CameraOptions().withCenter(LatLng{40.0, 10.0}).withZoom(0.0));
     EXPECT_EQ((std::vector<OverscaledTileID>{{0, 0, 0}}), util::tileCover({transform.getState()}, 0, zoomRange));
+}
+
+// MARK: Terrain (elevation-aware) cover: patch 0040
+
+namespace {
+
+util::TileCoverParameters terrainParams(const TransformState& state) {
+    util::TileCoverParameters params{state};
+    params.terrainVariableZoom = true;
+    return params;
+}
+
+void terrainCamera(Transform& transform, double bearing, double pitch, double zoom = 12.0) {
+    transform.resize({800, 600});
+    transform.setMaxPitch(85.0);
+    transform.jumpTo(CameraOptions()
+                         .withCenter(LatLng{46.0, 8.0})
+                         .withZoom(zoom)
+                         .withBearing(bearing)
+                         .withPitch(pitch));
+}
+
+std::shared_ptr<const TileElevationRangeFn> constantRange(double lo, double hi) {
+    return std::make_shared<const TileElevationRangeFn>(
+        [lo, hi](const CanonicalTileID&) { return std::optional<std::pair<double, double>>(std::make_pair(lo, hi)); });
+}
+
+uint8_t maxZoomOf(const std::vector<OverscaledTileID>& cover) {
+    uint8_t z = 0;
+    for (const auto& id : cover) z = std::max(z, id.canonical.z);
+    return z;
+}
+
+uint8_t minZoomOf(const std::vector<OverscaledTileID>& cover) {
+    uint8_t z = 255;
+    for (const auto& id : cover) z = std::min(z, id.canonical.z);
+    return z;
+}
+
+} // namespace
+
+TEST(TerrainTileCover, VariableZoomUsesFewerTilesThanOneZoomAtHighPitch) {
+    Transform transform;
+    terrainCamera(transform, 0.0, 75.0);
+    TransformState state = transform.getState();
+    const Range<uint8_t> range(6, 14);
+
+    // Without an elevation range the cover is the plain one-zoom cover.
+    const auto plain = util::tileCover({state}, 12, range);
+
+    state.setTileElevationRange(constantRange(0.0, 0.0));
+    const auto lod = util::tileCover(terrainParams(state), 12, range);
+
+    ASSERT_FALSE(lod.empty());
+    EXPECT_LT(lod.size(), plain.size());
+    EXPECT_LT(minZoomOf(lod), maxZoomOf(lod)); // coarser tiles towards the horizon
+    EXPECT_LE(maxZoomOf(lod), 14);
+    EXPECT_GE(minZoomOf(lod), 6);
+}
+
+TEST(TerrainTileCover, TileUnderTheCentreComesFirstAndFinerTilesLieTowardsTheCamera) {
+    Transform transform;
+    terrainCamera(transform, 0.0, 70.0);
+    TransformState state = transform.getState();
+    state.setTileElevationRange(constantRange(0.0, 0.0));
+    const auto cover = util::tileCover(terrainParams(state), 12, Range<uint8_t>(4, 14));
+    ASSERT_FALSE(cover.empty());
+    // Results are sorted by distance from the centre: the first tile is the one under the centre.
+    const auto& first = cover.front().canonical;
+    const auto centre = TileCoordinate::fromLatLng(first.z, LatLng{46.0, 8.0}).p;
+    EXPECT_EQ(first.x, static_cast<uint32_t>(centre.x));
+    EXPECT_EQ(first.y, static_cast<uint32_t>(centre.y));
+    // The finest tiles are those nearest the camera (south of the centre at bearing 0), which is nearer than the
+    // centre itself at this pitch, so the cover goes at least as fine as the centre tile.
+    EXPECT_GE(maxZoomOf(cover), first.z);
+    // The farthest (northmost) tile is no finer than the centre tile.
+    const auto farthest = std::min_element(cover.begin(), cover.end(), [](const auto& a, const auto& b) {
+        // smaller y at equal zoom = more north; compare in z0 units of the tile's north edge
+        return static_cast<double>(a.canonical.y) / (1u << a.canonical.z) <
+               static_cast<double>(b.canonical.y) / (1u << b.canonical.z);
+    });
+    EXPECT_LE(farthest->canonical.z, first.z);
+    EXPECT_LT(minZoomOf(cover), maxZoomOf(cover));
+}
+
+TEST(TerrainTileCover, ZoomRangeOfOneLevelGivesTheFixedZoomCover) {
+    Transform transform;
+    terrainCamera(transform, 20.0, 60.0);
+    TransformState state = transform.getState();
+    state.setTileElevationRange(constantRange(0.0, 0.0));
+    const auto cover = util::tileCover(terrainParams(state), 12, Range<uint8_t>(12, 12));
+    ASSERT_FALSE(cover.empty());
+    EXPECT_EQ(minZoomOf(cover), 12);
+    EXPECT_EQ(maxZoomOf(cover), 12);
+}
+
+TEST(TerrainTileCover, WithoutTheFlagNoTileIsFinerThanTheCoverZoom) {
+    Transform transform;
+    terrainCamera(transform, 0.0, 75.0);
+    TransformState state = transform.getState();
+    state.setTileElevationRange(constantRange(0.0, 0.0));
+    util::TileCoverParameters params{state}; // terrainVariableZoom stays false: the default LOD, capped at z
+    const auto fixed = util::tileCover(params, 12, Range<uint8_t>(6, 14));
+    ASSERT_FALSE(fixed.empty());
+    EXPECT_EQ(maxZoomOf(fixed), 12);
+    // With it, tiles near the camera go finer than the cover zoom.
+    const auto variable = util::tileCover(terrainParams(state), 12, Range<uint8_t>(6, 14));
+    EXPECT_GT(maxZoomOf(variable), 12);
+}
+
+TEST(TerrainTileCover, RoundZoomNeverGivesCoarserTilesThanFloor) {
+    Transform transform;
+    terrainCamera(transform, 0.0, 70.0);
+    TransformState state = transform.getState();
+    state.setTileElevationRange(constantRange(0.0, 0.0));
+    auto params = terrainParams(state);
+    const auto floored = util::tileCover(params, 12, Range<uint8_t>(4, 14));
+    params.roundZoom = true;
+    const auto rounded = util::tileCover(params, 12, Range<uint8_t>(4, 14));
+    ASSERT_FALSE(floored.empty());
+    ASSERT_FALSE(rounded.empty());
+    EXPECT_GE(rounded.size(), floored.size());
+    EXPECT_GE(maxZoomOf(rounded), maxZoomOf(floored));
+}
+
+TEST(TerrainTileCover, ElevationRangeBringsTilesIntoView) {
+    // A tile's box spans its elevation range, so a tile whose ground is off-screen but whose terrain rises into
+    // the view must not be culled (GL JS getTileBoundingVolume with Terrain#getMinMaxElevation).
+    Transform transform;
+    terrainCamera(transform, 0.0, 60.0, 14.0);
+    TransformState state = transform.getState();
+    const Range<uint8_t> range(14, 14);
+
+    state.setTileElevationRange(constantRange(0.0, 0.0));
+    const auto flat = util::tileCover(terrainParams(state), 14, range);
+    state.setTileElevationRange(constantRange(0.0, 6000.0));
+    const auto tall = util::tileCover(terrainParams(state), 14, range);
+
+    ASSERT_FALSE(flat.empty());
+    // Every tile visible with flat ground is still visible when its box is taller...
+    for (const auto& id : flat) {
+        EXPECT_NE(std::find(tall.begin(), tall.end(), id), tall.end());
+    }
+    // ...and the taller boxes pull in additional tiles.
+    EXPECT_GT(tall.size(), flat.size());
+}
+
+TEST(TerrainTileCover, UnknownRangeFallsBackToSeaLevelToCentreElevation) {
+    Transform transform;
+    terrainCamera(transform, 30.0, 65.0);
+    TransformState state = transform.getState();
+    const Range<uint8_t> range(4, 14);
+
+    state.setTileElevationRange(constantRange(0.0, 0.0));
+    const auto known = util::tileCover(terrainParams(state), 12, range);
+
+    // The range function knows nothing: the box is sea level to the centre's elevation (0 here): same cover.
+    state.setTileElevationRange(std::make_shared<const TileElevationRangeFn>(
+        [](const CanonicalTileID&) { return std::optional<std::pair<double, double>>(); }));
+    const auto unknown = util::tileCover(terrainParams(state), 12, range);
+    EXPECT_EQ(known, unknown);
+}
+
+TEST(TerrainTileCover, CoverIsInvariantToWhichTilesGetRangesAtFlatSeaLevel) {
+    // A range function that answers per tile (as the DEM-backed one does) gives the same cover as a constant one
+    // when every answer is the same.
+    Transform transform;
+    terrainCamera(transform, -75.0, 55.0);
+    TransformState state = transform.getState();
+    state.setTileElevationRange(constantRange(0.0, 0.0));
+    const auto constant = util::tileCover(terrainParams(state), 11, Range<uint8_t>(4, 14));
+    int calls = 0;
+    state.setTileElevationRange(std::make_shared<const TileElevationRangeFn>([&calls](const CanonicalTileID&) {
+        ++calls;
+        return std::optional<std::pair<double, double>>(std::make_pair(0.0, 0.0));
+    }));
+    const auto perTile = util::tileCover(terrainParams(state), 11, Range<uint8_t>(4, 14));
+    EXPECT_EQ(constant, perTile);
+    EXPECT_GT(calls, 0);
+}
+
+TEST(TerrainTileCover, FlippedElevationRangeIsHarmlessWhenTheCentreIsAboveSeaLevel) {
+    // High terrain under the whole view (a plateau): ranges at 2000-2500 m everywhere. The cover must still contain
+    // the tile under the centre and stay bounded.
+    Transform transform;
+    terrainCamera(transform, 0.0, 60.0);
+    TransformState state = transform.getState();
+    state.setTileElevationRange(constantRange(2000.0, 2500.0));
+    const auto cover = util::tileCover(terrainParams(state), 12, Range<uint8_t>(4, 14));
+    ASSERT_FALSE(cover.empty());
+    EXPECT_LT(cover.size(), 2000u);
 }
